@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <title>ระบบเช็คอินพนักงาน</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- Firebase SDK (compat version - ใช้ง่ายไม่ต้องมี build tool) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: 'Sarabun', 'Segoe UI', sans-serif;
+      background: #f2f4f7;
+      margin: 0;
+      padding: 16px;
+      color: #1a1a1a;
+    }
+    .card {
+      max-width: 420px;
+      margin: 0 auto;
+      background: #fff;
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    }
+    h1 { font-size: 20px; text-align: center; margin: 0 0 20px; color: #2c3e50; }
+    label { display: block; font-size: 14px; font-weight: 600; margin: 16px 0 6px; color: #444; }
+    input[type="text"], input[type="password"] {
+      width: 100%; padding: 12px; border: 1px solid #dcdfe4; border-radius: 10px;
+      font-size: 16px; background: #fafbfc;
+    }
+    .identity-box { margin-top: 8px; background: #eef2f7; border-radius: 10px; padding: 14px; font-size: 15px; }
+    .identity-box .name { font-weight: 700; color: #2c3e50; font-size: 17px; }
+    .identity-box .id { font-size: 13px; color: #777; margin-top: 2px; }
+    .logout-link {
+      display: block; text-align: right; font-size: 12px; color: #888;
+      margin-top: 6px; cursor: pointer; text-decoration: underline;
+    }
+    .photo-box {
+      margin-top: 8px; border: 2px dashed #c3c9d1; border-radius: 12px;
+      text-align: center; padding: 20px; cursor: pointer; background: #fafbfc;
+    }
+    .photo-box img { max-width: 100%; max-height: 200px; object-fit: cover; border-radius: 8px; margin-top: 10px; }
+    #photoInput { display: none; }
+    #mapBox { display: none; margin-top: 8px; }
+    #map { height: 260px; border-radius: 12px; border: 1px solid #dcdfe4; }
+    .map-hint { font-size: 12px; color: #888; margin-top: 6px; text-align: center; }
+    .gps-status {
+      margin-top: 12px; padding: 10px 12px; border-radius: 10px; font-size: 13px;
+      background: #eef2f7; color: #555; text-align: center;
+    }
+    .gps-status.ok { background: #e6f7ee; color: #1e7e42; }
+    .gps-status.bad { background: #fdecea; color: #c0392b; }
+    #mapLinkBox { margin-top: 8px; text-align: center; display: none; }
+    #mapLink { display: inline-block; font-size: 13px; color: #2c6ef2; text-decoration: underline; }
+    button.primary {
+      width: 100%; margin-top: 20px; padding: 14px; background: #2c6ef2; color: #fff;
+      border: none; border-radius: 12px; font-size: 16px; font-weight: 600; cursor: pointer;
+    }
+    button.primary:disabled { background: #a9bdda; cursor: not-allowed; }
+    .result { margin-top: 16px; padding: 14px; border-radius: 12px; font-size: 14px; text-align: center; display: none; }
+    .result.success { background: #e6f7ee; color: #1e7e42; display: block; }
+    .result.error { background: #fdecea; color: #c0392b; display: block; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+
+  <!-- ===== หน้าล็อกอิน ===== -->
+  <div class="card" id="loginScreen">
+    <h1>🔐 เข้าสู่ระบบ</h1>
+    <label>รหัสพนักงาน</label>
+    <input type="text" id="loginId" placeholder="กรอกรหัสพนักงาน">
+    <label>รหัสผ่าน</label>
+    <input type="password" id="loginPassword" placeholder="กรอกรหัสผ่าน">
+    <button class="primary" id="loginBtn" onclick="doLogin()">เข้าสู่ระบบ</button>
+    <div class="result" id="loginResult"></div>
+  </div>
+
+  <!-- ===== หน้าเช็คอิน ===== -->
+  <div class="card hidden" id="checkinScreen">
+    <h1>📍 เช็คอินพนักงาน</h1>
+    <div class="identity-box">
+      <div class="name" id="displayName"></div>
+      <div class="id" id="displayId"></div>
+    </div>
+    <div class="logout-link" onclick="logout()">ออกจากระบบ</div>
+
+    <label>ถ่ายรูปหน้างาน</label>
+    <div class="photo-box" id="photoBox" onclick="document.getElementById('photoInput').click()">
+      <div id="photoPlaceholder">📷 แตะเพื่อถ่ายรูป</div>
+      <input type="file" id="photoInput" accept="image/*" capture="environment">
+      <img id="photoPreview" style="display:none;">
+    </div>
+
+    <div class="gps-status" id="gpsStatus">📡 กำลังขอตำแหน่ง GPS...</div>
+    <div id="mapBox">
+      <label>ปักหมุดตำแหน่งที่คุณอยู่ (สำรองเมื่อ GPS ใช้ไม่ได้)</label>
+      <div id="map"></div>
+      <div class="map-hint">แตะบนแผนที่ตรงตำแหน่งจริงของคุณ (ลากหมุดปรับได้)</div>
+    </div>
+    <div id="mapLinkBox">
+      <a id="mapLink" href="#" target="_blank">🗺️ เปิดดูตำแหน่งนี้บน Google Maps</a>
+    </div>
+
+    <button class="primary" id="submitBtn" disabled onclick="submitCheckin()">ส่งเช็คอิน</button>
+    <div class="result" id="result"></div>
+  </div>
+
+  <script>
+    // ===== ตั้งค่า Firebase =====
+    const firebaseConfig = {
+      apiKey: "AIzaSyD96o782z4p-tgxGj8Bm5fNk43Y_s2eefM",
+      authDomain: "checkin-system-learn.firebaseapp.com",
+      projectId: "checkin-system-learn",
+      storageBucket: "checkin-system-learn.firebasestorage.app",
+      messagingSenderId: "626049253047",
+      appId: "1:626049253047:web:3d5ca5ecf9968e13091732"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    // ===== ลิงก์ Apps Script สำหรับอัพโหลดรูป (ใส่ลิงก์จริงหลัง deploy) =====
+    const PHOTO_UPLOAD_URL = "https://script.google.com/macros/s/AKfycbyzQQusmVDHf0d8saSGQ3hWtEgieDOSruSAoIlDOamniwjoqcBLcsOkaYT7bSZuKDwJCQ/exec";
+
+    var currentLat = null, currentLng = null, currentAccuracy = null;
+    var photoBase64 = null;
+    var leafletMap = null, marker = null;
+    var loggedInName = null, loggedInId = null;
+
+    // ===== เข้ารหัสรหัสผ่านด้วย SHA-256 (Web Crypto API) =====
+    async function sha256Hex(text) {
+      const enc = new TextEncoder().encode(text);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', enc);
+      return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+    async function hashPassword(password, salt) {
+      return await sha256Hex(password + salt);
+    }
+    function generateSalt() {
+      return (crypto.randomUUID ? crypto.randomUUID() : (Math.random().toString(36) + Date.now().toString(36)));
+    }
+
+    // ===== ล็อกอิน =====
+    async function doLogin() {
+      const employeeId = document.getElementById('loginId').value.trim();
+      const password = document.getElementById('loginPassword').value;
+      const resultEl = document.getElementById('loginResult');
+      resultEl.style.display = 'none';
+
+      if (!employeeId || !password) {
+        resultEl.className = 'result error';
+        resultEl.textContent = 'กรุณากรอกรหัสพนักงานและรหัสผ่าน';
+        resultEl.style.display = 'block';
+        return;
+      }
+
+      document.getElementById('loginBtn').disabled = true;
+      try {
+        const doc = await db.collection('employees').doc(employeeId).get();
+        if (!doc.exists) {
+          throw new Error('ไม่พบรหัสพนักงานนี้ในระบบ');
+        }
+        const emp = doc.data();
+        const computedHash = await hashPassword(password, emp.salt);
+        if (computedHash !== emp.passwordHash) {
+          throw new Error('รหัสผ่านไม่ถูกต้อง');
+        }
+
+        loggedInName = emp.name;
+        loggedInId = employeeId;
+        document.getElementById('displayName').textContent = loggedInName;
+        document.getElementById('displayId').textContent = 'รหัสพนักงาน: ' + loggedInId;
+        document.getElementById('loginScreen').classList.add('hidden');
+        document.getElementById('checkinScreen').classList.remove('hidden');
+        requestLocation();
+      } catch (err) {
+        resultEl.className = 'result error';
+        resultEl.textContent = '❌ ' + err.message;
+        resultEl.style.display = 'block';
+      } finally {
+        document.getElementById('loginBtn').disabled = false;
+      }
+    }
+
+    function logout() {
+      loggedInName = null; loggedInId = null; photoBase64 = null;
+      currentLat = null; currentLng = null; currentAccuracy = null;
+      document.getElementById('loginId').value = '';
+      document.getElementById('loginPassword').value = '';
+      document.getElementById('photoPreview').style.display = 'none';
+      document.getElementById('photoPlaceholder').textContent = '📷 แตะเพื่อถ่ายรูป';
+      document.getElementById('result').style.display = 'none';
+      document.getElementById('checkinScreen').classList.add('hidden');
+      document.getElementById('loginScreen').classList.remove('hidden');
+    }
+
+    // ===== ขอ GPS อัตโนมัติ (รอปรับความแม่นยำสูงสุด 8 วินาที) =====
+    function requestLocation() {
+      const statusEl = document.getElementById('gpsStatus');
+      statusEl.textContent = '📡 กำลังขอตำแหน่ง GPS...';
+      statusEl.className = 'gps-status';
+
+      if (!navigator.geolocation) {
+        statusEl.textContent = '❌ อุปกรณ์นี้ไม่รองรับ GPS กรุณาปักหมุดเอง';
+        statusEl.className = 'gps-status bad';
+        showManualMap();
+        return;
+      }
+
+      let bestAccuracy = Infinity, bestLat = null, bestLng = null, watchId = null, settled = false;
+
+      function finish(lat, lng, accuracy) {
+        if (settled) return;
+        settled = true;
+        if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+        setLocation(lat, lng, accuracy);
+        statusEl.textContent = '✅ ยืนยันตำแหน่งด้วย GPS แล้ว (ความแม่นยำ ~' + Math.round(accuracy) + ' ม.)';
+        statusEl.className = 'gps-status ok';
+      }
+      function fallbackToManual() {
+        if (settled) return;
+        settled = true;
+        if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+        statusEl.textContent = '⚠️ หาตำแหน่งอัตโนมัติไม่เจอ กรุณาปักหมุดเองด้านล่าง';
+        statusEl.className = 'gps-status bad';
+        showManualMap();
+      }
+
+      watchId = navigator.geolocation.watchPosition(function(pos) {
+        const acc = pos.coords.accuracy;
+        if (acc < bestAccuracy) {
+          bestAccuracy = acc; bestLat = pos.coords.latitude; bestLng = pos.coords.longitude;
+          statusEl.textContent = '📡 กำลังปรับตำแหน่งให้แม่นยำขึ้น... (~' + Math.round(acc) + ' ม.)';
+        }
+        if (acc <= 15) finish(pos.coords.latitude, pos.coords.longitude, acc);
+      }, function() { fallbackToManual(); }, { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 });
+
+      setTimeout(function() {
+        if (settled) return;
+        if (bestLat !== null) finish(bestLat, bestLng, bestAccuracy);
+        else fallbackToManual();
+      }, 8000);
+    }
+
+    function showManualMap() {
+      document.getElementById('mapBox').style.display = 'block';
+      if (!leafletMap) {
+        leafletMap = L.map('map').setView([13.7563, 100.5018], 6);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '&copy; OpenStreetMap contributors', maxZoom: 19
+        }).addTo(leafletMap);
+        leafletMap.on('click', function(e) {
+          setLocation(e.latlng.lat, e.latlng.lng);
+          if (marker) marker.setLatLng(e.latlng);
+          else {
+            marker = L.marker(e.latlng, { draggable: true }).addTo(leafletMap);
+            marker.on('dragend', function() {
+              const pos = marker.getLatLng();
+              setLocation(pos.lat, pos.lng);
+            });
+          }
+          document.getElementById('gpsStatus').textContent = '📍 ใช้ตำแหน่งที่ปักหมุดเอง';
+          document.getElementById('gpsStatus').className = 'gps-status ok';
+        });
+      } else {
+        setTimeout(function() { leafletMap.invalidateSize(); }, 100);
+      }
+    }
+
+    function setLocation(lat, lng, accuracy) {
+      currentLat = lat; currentLng = lng;
+      currentAccuracy = (typeof accuracy === 'number') ? Math.round(accuracy) : null;
+      const mapUrl = 'https://www.google.com/maps?q=' + lat + ',' + lng;
+      document.getElementById('mapLink').href = mapUrl;
+      document.getElementById('mapLinkBox').style.display = 'block';
+      checkFormReady();
+    }
+
+    document.getElementById('photoInput').addEventListener('change', function(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        photoBase64 = evt.target.result;
+        const preview = document.getElementById('photoPreview');
+        preview.src = photoBase64;
+        preview.style.display = 'block';
+        document.getElementById('photoPlaceholder').textContent = '✅ ถ่ายรูปแล้ว (แตะเพื่อถ่ายใหม่)';
+        checkFormReady();
+      };
+      reader.readAsDataURL(file);
+    });
+
+    function checkFormReady() {
+      const ready = photoBase64 && currentLat !== null;
+      document.getElementById('submitBtn').disabled = !ready;
+    }
+
+    async function submitCheckin() {
+      const submitBtn = document.getElementById('submitBtn');
+      const resultEl = document.getElementById('result');
+      submitBtn.disabled = true;
+      resultEl.style.display = 'none';
+      resultEl.className = 'result';
+      resultEl.textContent = 'กำลังส่งข้อมูล...';
+      resultEl.style.display = 'block';
+
+      try {
+        // 1) อัพโหลดรูปผ่าน Apps Script ก่อน
+        const uploadRes = await fetch(PHOTO_UPLOAD_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // เลี่ยง CORS preflight
+          body: JSON.stringify({ employeeId: loggedInId, photoBase64: photoBase64 })
+        });
+        const uploadData = await uploadRes.json();
+        if (!uploadData.success) throw new Error(uploadData.message || 'อัพโหลดรูปไม่สำเร็จ');
+
+        // 2) บันทึกข้อมูลเช็คอินลง Firestore
+        const mapUrl = 'https://www.google.com/maps?q=' + currentLat + ',' + currentLng;
+        await db.collection('checkins').add({
+          employeeId: loggedInId,
+          employeeName: loggedInName,
+          timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+          lat: currentLat,
+          lng: currentLng,
+          accuracy: currentAccuracy,
+          mapLink: mapUrl,
+          photoUrl: uploadData.url
+        });
+
+        resultEl.className = 'result success';
+        resultEl.textContent = '✅ เช็คอินสำเร็จ!';
+        document.getElementById('photoPreview').style.display = 'none';
+        document.getElementById('photoPlaceholder').textContent = '📷 แตะเพื่อถ่ายรูป';
+        photoBase64 = null;
+        checkFormReady();
+      } catch (err) {
+        resultEl.className = 'result error';
+        resultEl.textContent = '❌ ' + err.message;
+        submitBtn.disabled = false;
+      }
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <title>จัดการพนักงาน</title>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: 'Sarabun', 'Segoe UI', sans-serif;
+      background: #f2f4f7;
+      margin: 0;
+      padding: 16px;
+      color: #1a1a1a;
+    }
+    .card {
+      max-width: 480px; margin: 0 auto; background: #fff; border-radius: 16px;
+      padding: 24px; box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    }
+    h1 { font-size: 20px; text-align: center; margin: 0 0 20px; color: #2c3e50; }
+    h2 { font-size: 16px; color: #2c3e50; margin: 24px 0 10px; }
+    label { display: block; font-size: 14px; font-weight: 600; margin: 14px 0 6px; color: #444; }
+    input[type="text"], input[type="password"], input[type="email"] {
+      width: 100%; padding: 11px; border: 1px solid #dcdfe4; border-radius: 10px;
+      font-size: 15px; background: #fafbfc;
+    }
+    button.primary {
+      width: 100%; margin-top: 16px; padding: 13px; background: #2c6ef2; color: #fff;
+      border: none; border-radius: 12px; font-size: 15px; font-weight: 600; cursor: pointer;
+    }
+    button.primary:disabled { background: #a9bdda; cursor: not-allowed; }
+    .msg { margin-top: 12px; padding: 10px 12px; border-radius: 10px; font-size: 13px; display: none; }
+    .msg.ok { background: #e6f7ee; color: #1e7e42; display: block; }
+    .msg.err { background: #fdecea; color: #c0392b; display: block; }
+    .emp-row {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 10px 0; border-bottom: 1px solid #eee; font-size: 14px;
+    }
+    .emp-row .info { color: #444; }
+    .emp-row .info .id { font-size: 12px; color: #888; }
+    .emp-row .actions { display: flex; }
+    .emp-row button.delete {
+      background: #fdecea; color: #c0392b; border: none; border-radius: 8px;
+      padding: 6px 10px; font-size: 12px; cursor: pointer;
+    }
+    .emp-row button.reset {
+      background: #eef2f7; color: #2c6ef2; border: none; border-radius: 8px;
+      padding: 6px 10px; font-size: 12px; cursor: pointer; margin-right: 6px;
+    }
+    .hidden { display: none; }
+    .empty-note { font-size: 13px; color: #888; padding: 10px 0; }
+    .logout-link {
+      display: block; text-align: right; font-size: 12px; color: #888;
+      margin-top: -10px; margin-bottom: 10px; cursor: pointer; text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ===== หน้าล็อกอินแอดมิน (Firebase Auth จริง) ===== -->
+  <div class="card" id="loginScreen">
+    <h1>🔑 เข้าสู่ระบบแอดมิน</h1>
+    <label>ชื่อผู้ใช้แอดมิน</label>
+    <input type="text" id="adminUsername" placeholder="เช่น chanyon.admin">
+    <label>รหัสผ่าน</label>
+    <input type="password" id="adminPassword" placeholder="รหัสผ่าน">
+    <button class="primary" onclick="doAdminLogin()">เข้าสู่ระบบ</button>
+    <div class="msg" id="loginMsg"></div>
+  </div>
+
+  <!-- ===== หน้าจัดการพนักงาน ===== -->
+  <div class="card hidden" id="manageScreen">
+    <h1>👥 จัดการพนักงาน</h1>
+    <div class="logout-link" onclick="doAdminLogout()">ออกจากระบบ</div>
+
+    <h2>เพิ่มพนักงานใหม่</h2>
+    <label>รหัสพนักงาน</label>
+    <input type="text" id="newEmpId" placeholder="เช่น 213456">
+    <label>ชื่อ-นามสกุล</label>
+    <input type="text" id="newEmpName" placeholder="เช่น สมชาย ใจดี">
+    <label>ตั้งรหัสผ่าน</label>
+    <input type="password" id="newEmpPassword" placeholder="ตั้งรหัสผ่านให้พนักงาน">
+    <button class="primary" onclick="addEmployee()">เพิ่มพนักงาน</button>
+    <div class="msg" id="addMsg"></div>
+
+    <h2>รายชื่อพนักงานทั้งหมด</h2>
+    <div id="employeeList"><div class="empty-note">กำลังโหลด...</div></div>
+  </div>
+
+  <script>
+    // ===== ตั้งค่า Firebase =====
+    const firebaseConfig = {
+      apiKey: "AIzaSyD96o782z4p-tgxGj8Bm5fNk43Y_s2eefM",
+      authDomain: "checkin-system-learn.firebaseapp.com",
+      projectId: "checkin-system-learn",
+      storageBucket: "checkin-system-learn.firebasestorage.app",
+      messagingSenderId: "626049253047",
+      appId: "1:626049253047:web:3d5ca5ecf9968e13091732"
+    };
+    const ADMIN_EMAIL_DOMAIN = "@checkin-system-learn.com"; // ต่อท้าย username แอดมินให้เป็นอีเมล
+
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+
+    // ===== เข้ารหัสรหัสผ่านพนักงานด้วย SHA-256 (เหมือนฝั่ง index.html) =====
+    async function sha256Hex(text) {
+      const enc = new TextEncoder().encode(text);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', enc);
+      return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+    async function hashPassword(password, salt) {
+      return await sha256Hex(password + salt);
+    }
+    function generateSalt() {
+      return (crypto.randomUUID ? crypto.randomUUID() : (Math.random().toString(36) + Date.now().toString(36)));
+    }
+
+    // ===== ล็อกอินแอดมิน =====
+    function doAdminLogin() {
+      const username = document.getElementById('adminUsername').value.trim();
+      const password = document.getElementById('adminPassword').value;
+      const msg = document.getElementById('loginMsg');
+      msg.style.display = 'none';
+
+      if (!username || !password) {
+        msg.className = 'msg err';
+        msg.textContent = 'กรุณากรอกชื่อผู้ใช้และรหัสผ่าน';
+        msg.style.display = 'block';
+        return;
+      }
+
+      const email = username.includes('@') ? username : username + ADMIN_EMAIL_DOMAIN;
+
+      auth.signInWithEmailAndPassword(email, password)
+        .then(function() {
+          document.getElementById('loginScreen').classList.add('hidden');
+          document.getElementById('manageScreen').classList.remove('hidden');
+          loadEmployees();
+        })
+        .catch(function(err) {
+          msg.className = 'msg err';
+          msg.textContent = '❌ เข้าสู่ระบบไม่สำเร็จ: รหัสผ่านหรือชื่อผู้ใช้ไม่ถูกต้อง';
+          msg.style.display = 'block';
+        });
+    }
+
+    function doAdminLogout() {
+      auth.signOut().then(function() {
+        document.getElementById('manageScreen').classList.add('hidden');
+        document.getElementById('loginScreen').classList.remove('hidden');
+        document.getElementById('adminUsername').value = '';
+        document.getElementById('adminPassword').value = '';
+      });
+    }
+
+    // ===== โหลดรายชื่อพนักงาน =====
+    function loadEmployees() {
+      const listEl = document.getElementById('employeeList');
+      listEl.innerHTML = '<div class="empty-note">กำลังโหลด...</div>';
+
+      db.collection('employees').get().then(function(snapshot) {
+        if (snapshot.empty) {
+          listEl.innerHTML = '<div class="empty-note">ยังไม่มีพนักงานในระบบ</div>';
+          return;
+        }
+        listEl.innerHTML = '';
+        snapshot.forEach(function(doc) {
+          const emp = doc.data();
+          const employeeId = doc.id;
+          const row = document.createElement('div');
+          row.className = 'emp-row';
+          row.innerHTML =
+            '<div class="info">' + emp.name + '<div class="id">รหัส: ' + employeeId + '</div></div>' +
+            '<div class="actions">' +
+            '<button class="reset" onclick="resetPassword(\'' + employeeId + '\')">รีเซ็ตรหัสผ่าน</button>' +
+            '<button class="delete" onclick="deleteEmployee(\'' + employeeId + '\')">ลบ</button>' +
+            '</div>';
+          listEl.appendChild(row);
+        });
+      }).catch(function(err) {
+        listEl.innerHTML = '<div class="empty-note">โหลดไม่สำเร็จ: ' + err.message + '</div>';
+      });
+    }
+
+    // ===== เพิ่มพนักงานใหม่ =====
+    async function addEmployee() {
+      const employeeId = document.getElementById('newEmpId').value.trim();
+      const name = document.getElementById('newEmpName').value.trim();
+      const password = document.getElementById('newEmpPassword').value;
+      const msg = document.getElementById('addMsg');
+      msg.style.display = 'none';
+
+      if (!employeeId || !name || !password) {
+        msg.className = 'msg err';
+        msg.textContent = 'กรุณากรอกข้อมูลให้ครบ';
+        msg.style.display = 'block';
+        return;
+      }
+
+      try {
+        const existing = await db.collection('employees').doc(employeeId).get();
+        if (existing.exists) {
+          throw new Error('รหัสพนักงาน "' + employeeId + '" มีอยู่แล้วในระบบ');
+        }
+
+        const salt = generateSalt();
+        const hash = await hashPassword(password, salt);
+        await db.collection('employees').doc(employeeId).set({
+          name: name,
+          passwordHash: hash,
+          salt: salt,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+
+        msg.className = 'msg ok';
+        msg.textContent = '✅ เพิ่ม "' + name + '" เรียบร้อยแล้ว';
+        msg.style.display = 'block';
+        document.getElementById('newEmpId').value = '';
+        document.getElementById('newEmpName').value = '';
+        document.getElementById('newEmpPassword').value = '';
+        loadEmployees();
+      } catch (err) {
+        msg.className = 'msg err';
+        msg.textContent = '❌ ' + err.message;
+        msg.style.display = 'block';
+      }
+    }
+
+    // ===== รีเซ็ตรหัสผ่านพนักงาน =====
+    async function resetPassword(employeeId) {
+      const newPassword = prompt('ตั้งรหัสผ่านใหม่สำหรับรหัสพนักงาน ' + employeeId + ':');
+      if (!newPassword) return;
+
+      try {
+        const salt = generateSalt();
+        const hash = await hashPassword(newPassword, salt);
+        await db.collection('employees').doc(employeeId).update({
+          passwordHash: hash,
+          salt: salt
+        });
+        alert('✅ ตั้งรหัสผ่านใหม่ให้รหัสพนักงาน ' + employeeId + ' เรียบร้อยแล้ว');
+      } catch (err) {
+        alert('❌ เกิดข้อผิดพลาด: ' + err.message);
+      }
+    }
+
+    // ===== ลบพนักงาน =====
+    async function deleteEmployee(employeeId) {
+      if (!confirm('ยืนยันลบพนักงานรหัส ' + employeeId + ' ออกจากระบบ?')) return;
+      try {
+        await db.collection('employees').doc(employeeId).delete();
+        loadEmployees();
+      } catch (err) {
+        alert('❌ เกิดข้อผิดพลาด: ' + err.message);
+      }
+    }
+
+    // ===== เช็คสถานะล็อกอินตอนเปิดหน้า (เผื่อยังไม่ได้ signOut) =====
+    auth.onAuthStateChanged(function(user) {
+      if (user) {
+        document.getElementById('loginScreen').classList.add('hidden');
+        document.getElementById('manageScreen').classList.remove('hidden');
+        loadEmployees();
+      }
+    });
+  </script>
+</body>
+</html>
