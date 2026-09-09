@@ -218,8 +218,14 @@
         settled = true;
         if (watchId !== null) navigator.geolocation.clearWatch(watchId);
         setLocation(lat, lng, accuracy);
-        statusEl.textContent = '✅ ยืนยันตำแหน่งด้วย GPS แล้ว (ความแม่นยำ ~' + Math.round(accuracy) + ' ม.)';
-        statusEl.className = 'gps-status ok';
+        if (accuracy <= 100) {
+          statusEl.textContent = '✅ ยืนยันตำแหน่งด้วย GPS แล้ว (ความแม่นยำ ~' + Math.round(accuracy) + ' ม.)';
+          statusEl.className = 'gps-status ok';
+        } else {
+          statusEl.textContent = '⚠️ GPS หาตำแหน่งได้ไม่แม่นยำ (~' + Math.round(accuracy) + ' ม.) แนะนำปักหมุดเองด้านล่างเพื่อความถูกต้อง';
+          statusEl.className = 'gps-status bad';
+          showManualMap();
+        }
       }
       function fallbackToManual() {
         if (settled) return;
