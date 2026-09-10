@@ -129,7 +129,7 @@
     var currentLat = null, currentLng = null, currentAccuracy = null;
     var photoBase64 = null;
     var leafletMap = null, marker = null;
-    var loggedInName = null, loggedInId = null;
+    var loggedInName = null, loggedInId = null, loggedInDisplayName = null;
 
     // ===== เข้ารหัสรหัสผ่านด้วย SHA-256 (Web Crypto API) =====
     async function sha256Hex(text) {
@@ -216,7 +216,8 @@
 
         loggedInName = emp.name;
         loggedInId = employeeId;
-        document.getElementById('displayName').textContent = loggedInName;
+        loggedInDisplayName = emp.nickname ? (emp.name + ' (' + emp.nickname + ')') : emp.name;
+        document.getElementById('displayName').textContent = loggedInDisplayName;
         document.getElementById('displayId').textContent = 'รหัสพนักงาน: ' + loggedInId;
         document.getElementById('loginScreen').classList.add('hidden');
         document.getElementById('checkinScreen').classList.remove('hidden');
@@ -231,7 +232,7 @@
     }
 
     function logout() {
-      loggedInName = null; loggedInId = null; photoBase64 = null;
+      loggedInName = null; loggedInId = null; loggedInDisplayName = null; photoBase64 = null;
       currentLat = null; currentLng = null; currentAccuracy = null;
       document.getElementById('loginId').value = '';
       document.getElementById('loginPassword').value = '';
@@ -346,7 +347,7 @@
         checkFormReady();
 
         try {
-          const watermarked = await createWatermarkedPhoto(photoBase64, loggedInName, currentLat, currentLng);
+          const watermarked = await createWatermarkedPhoto(photoBase64, loggedInDisplayName, currentLat, currentLng);
           preview.src = watermarked; // โชว์ preview แบบมีข้อความประทับแล้ว
           placeholder.textContent = '✅ ถ่ายรูปแล้ว (แตะเพื่อถ่ายใหม่)';
         } catch (err) {
@@ -372,7 +373,7 @@
 
       try {
         // 1) ประทับวันที่/เวลา/ชื่อ/พิกัด ลงบนรูปก่อน แล้วค่อยอัพโหลด
-        const watermarkedPhoto = await createWatermarkedPhoto(photoBase64, loggedInName, currentLat, currentLng);
+        const watermarkedPhoto = await createWatermarkedPhoto(photoBase64, loggedInDisplayName, currentLat, currentLng);
 
         const uploadRes = await fetch(PHOTO_UPLOAD_URL, {
           method: 'POST',
