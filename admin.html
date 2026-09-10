@@ -81,6 +81,8 @@
     <input type="text" id="newEmpId" placeholder="เช่น 213456">
     <label>ชื่อ-นามสกุล</label>
     <input type="text" id="newEmpName" placeholder="เช่น สมชาย ใจดี">
+    <label>ชื่อเล่น (ไม่บังคับ)</label>
+    <input type="text" id="newEmpNickname" placeholder="เช่น ชาย">
     <label>ตั้งรหัสผ่าน</label>
     <input type="password" id="newEmpPassword" placeholder="ตั้งรหัสผ่านให้พนักงาน">
     <button class="primary" onclick="addEmployee()">เพิ่มพนักงาน</button>
@@ -171,10 +173,11 @@
         snapshot.forEach(function(doc) {
           const emp = doc.data();
           const employeeId = doc.id;
+          const displayName = emp.nickname ? (emp.name + ' (' + emp.nickname + ')') : emp.name;
           const row = document.createElement('div');
           row.className = 'emp-row';
           row.innerHTML =
-            '<div class="info">' + emp.name + '<div class="id">รหัส: ' + employeeId + '</div></div>' +
+            '<div class="info">' + displayName + '<div class="id">รหัส: ' + employeeId + '</div></div>' +
             '<div class="actions">' +
             '<button class="reset" onclick="resetPassword(\'' + employeeId + '\')">รีเซ็ตรหัสผ่าน</button>' +
             '<button class="delete" onclick="deleteEmployee(\'' + employeeId + '\')">ลบ</button>' +
@@ -190,6 +193,7 @@
     async function addEmployee() {
       const employeeId = document.getElementById('newEmpId').value.trim();
       const name = document.getElementById('newEmpName').value.trim();
+      const nickname = document.getElementById('newEmpNickname').value.trim();
       const password = document.getElementById('newEmpPassword').value;
       const msg = document.getElementById('addMsg');
       msg.style.display = 'none';
@@ -211,6 +215,7 @@
         const hash = await hashPassword(password, salt);
         await db.collection('employees').doc(employeeId).set({
           name: name,
+          nickname: nickname || '',
           passwordHash: hash,
           salt: salt,
           createdAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -221,6 +226,7 @@
         msg.style.display = 'block';
         document.getElementById('newEmpId').value = '';
         document.getElementById('newEmpName').value = '';
+        document.getElementById('newEmpNickname').value = '';
         document.getElementById('newEmpPassword').value = '';
         loadEmployees();
       } catch (err) {
