@@ -334,13 +334,24 @@
       const file = e.target.files[0];
       if (!file) return;
       const reader = new FileReader();
-      reader.onload = function(evt) {
+      reader.onload = async function(evt) {
         photoBase64 = evt.target.result;
         const preview = document.getElementById('photoPreview');
+        const placeholder = document.getElementById('photoPlaceholder');
+
+        // โชว์รูปดิบไปก่อนทันที ระหว่างรอประทับข้อความ
         preview.src = photoBase64;
         preview.style.display = 'block';
-        document.getElementById('photoPlaceholder').textContent = '✅ ถ่ายรูปแล้ว (แตะเพื่อถ่ายใหม่)';
+        placeholder.textContent = '⏳ กำลังประทับข้อความ...';
         checkFormReady();
+
+        try {
+          const watermarked = await createWatermarkedPhoto(photoBase64, loggedInName, currentLat, currentLng);
+          preview.src = watermarked; // โชว์ preview แบบมีข้อความประทับแล้ว
+          placeholder.textContent = '✅ ถ่ายรูปแล้ว (แตะเพื่อถ่ายใหม่)';
+        } catch (err) {
+          placeholder.textContent = '✅ ถ่ายรูปแล้ว (แตะเพื่อถ่ายใหม่)';
+        }
       };
       reader.readAsDataURL(file);
     });
