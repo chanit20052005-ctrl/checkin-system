@@ -76,16 +76,19 @@
     <h1>👥 จัดการพนักงาน</h1>
     <div class="logout-link" onclick="doAdminLogout()">ออกจากระบบ</div>
 
-    <h2>เพิ่มพนักงานใหม่</h2>
+    <h2 id="formTitle">เพิ่มพนักงานใหม่</h2>
     <label>รหัสพนักงาน</label>
     <input type="text" id="newEmpId" placeholder="เช่น 213456">
     <label>ชื่อ-นามสกุล</label>
     <input type="text" id="newEmpName" placeholder="เช่น สมชาย ใจดี">
     <label>ชื่อเล่น (ไม่บังคับ)</label>
     <input type="text" id="newEmpNickname" placeholder="เช่น ชาย">
-    <label>ตั้งรหัสผ่าน</label>
-    <input type="password" id="newEmpPassword" placeholder="ตั้งรหัสผ่านให้พนักงาน">
-    <button class="primary" onclick="addEmployee()">เพิ่มพนักงาน</button>
+    <div id="passwordFieldWrapper">
+      <label>ตั้งรหัสผ่าน</label>
+      <input type="password" id="newEmpPassword" placeholder="ตั้งรหัสผ่านให้พนักงาน">
+    </div>
+    <button class="primary" id="submitEmpBtn" onclick="addEmployee()">เพิ่มพนักงาน</button>
+    <div class="logout-link hidden" id="cancelEditLink" onclick="cancelEdit()">ยกเลิกการแก้ไข</div>
     <div class="msg" id="addMsg"></div>
 
     <h2>รายชื่อพนักงานทั้งหมด</h2>
@@ -152,6 +155,7 @@
 
     function doAdminLogout() {
       auth.signOut().then(function() {
+        cancelEdit();
         document.getElementById('manageScreen').classList.add('hidden');
         document.getElementById('loginScreen').classList.remove('hidden');
         document.getElementById('adminUsername').value = '';
@@ -174,10 +178,13 @@
           const emp = doc.data();
           const employeeId = doc.id;
           const displayName = emp.nickname ? (emp.name + ' (' + emp.nickname + ')') : emp.name;
+          const safeName = emp.name.replace(/'/g, "\\'");
+          const safeNickname = (emp.nickname || '').replace(/'/g, "\\'");
           const row = document.createElement('div');
           row.className = 'emp-row';
           row.innerHTML =
-            '<div class="info">' + displayName + '<div class="id">รหัส: ' + employeeId + '</div></div>' +
+            '<div class="info" style="cursor:pointer;" onclick="startEdit(\'' + employeeId + '\', \'' + safeName + '\', \'' + safeNickname + '\')">' +
+            displayName + '<div class="id">รหัส: ' + employeeId + ' · แตะเพื่อแก้ไข</div></div>' +
             '<div class="actions">' +
             '<button class="reset" onclick="resetPassword(\'' + employeeId + '\')">รีเซ็ตรหัสผ่าน</button>' +
             '<button class="delete" onclick="deleteEmployee(\'' + employeeId + '\')">ลบ</button>' +
@@ -189,8 +196,14 @@
       });
     }
 
-    // ===== เพิ่มพนักงานใหม่ =====
+    let editingEmployeeId = null;
+
+    // ===== เพิ่มพนักงานใหม่ / บันทึกการแก้ไข (ปุ่มเดียวกัน แยกโหมดกัน) =====
     async function addEmployee() {
+      if (editingEmployeeId) {
+        return updateEmployee();
+      }
+
       const employeeId = document.getElementById('newEmpId').value.trim();
       const name = document.getElementById('newEmpName').value.trim();
       const nickname = document.getElementById('newEmpNickname').value.trim();
@@ -228,6 +241,66 @@
         document.getElementById('newEmpName').value = '';
         document.getElementById('newEmpNickname').value = '';
         document.getElementById('newEmpPassword').value = '';
+        loadEmployees();
+      } catch (err) {
+        msg.className = 'msg err';
+        msg.textContent = '❌ ' + err.message;
+        msg.style.display = 'block';
+      }
+    }
+
+    // ===== เริ่มแก้ไขพนักงาน (คลิกที่ชื่อในรายชื่อ) =====
+    function startEdit(employeeId, name, nickname) {
+      editingEmployeeId = employeeId;
+      document.getElementById('formTitle').textContent = 'แก้ไขข้อมูลพนักงาน';
+      document.getElementById('newEmpId').value = employeeId;
+      document.getElementById('newEmpId').disabled = true;
+      document.getElementById('newEmpName').value = name;
+      document.getElementById('newEmpNickname').value = nickname || '';
+      document.getElementById('passwordFieldWrapper').classList.add('hidden');
+      document.getElementById('submitEmpBtn').textContent = 'บันทึกการแก้ไข';
+      document.getElementById('cancelEditLink').classList.remove('hidden');
+      document.getElementById('addMsg').style.display = 'none';
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // ===== ยกเลิกการแก้ไข กลับไปโหมดเพิ่มพนักงาน =====
+    function cancelEdit() {
+      editingEmployeeId = null;
+      document.getElementById('formTitle').textContent = 'เพิ่มพนักงานใหม่';
+      document.getElementById('newEmpId').value = '';
+      document.getElementById('newEmpId').disabled = false;
+      document.getElementById('newEmpName').value = '';
+      document.getElementById('newEmpNickname').value = '';
+      document.getElementById('passwordFieldWrapper').classList.remove('hidden');
+      document.getElementById('submitEmpBtn').textContent = 'เพิ่มพนักงาน';
+      document.getElementById('cancelEditLink').classList.add('hidden');
+      document.getElementById('addMsg').style.display = 'none';
+    }
+
+    // ===== บันทึกการแก้ไขชื่อ/ชื่อเล่น (ไม่แตะรหัสผ่าน) =====
+    async function updateEmployee() {
+      const name = document.getElementById('newEmpName').value.trim();
+      const nickname = document.getElementById('newEmpNickname').value.trim();
+      const msg = document.getElementById('addMsg');
+      msg.style.display = 'none';
+
+      if (!name) {
+        msg.className = 'msg err';
+        msg.textContent = 'กรุณากรอกชื่อ-นามสกุล';
+        msg.style.display = 'block';
+        return;
+      }
+
+      try {
+        await db.collection('employees').doc(editingEmployeeId).update({
+          name: name,
+          nickname: nickname || ''
+        });
+        msg.className = 'msg ok';
+        msg.textContent = '✅ บันทึกการแก้ไขเรียบร้อยแล้ว';
+        msg.style.display = 'block';
+        cancelEdit();
         loadEmployees();
       } catch (err) {
         msg.className = 'msg err';
