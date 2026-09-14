@@ -65,6 +65,26 @@
     .result.success { background: #e6f7ee; color: #1e7e42; display: block; }
     .result.error { background: #fdecea; color: #c0392b; display: block; }
     .hidden { display: none; }
+    .history-nav {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-top: 6px; font-size: 12px;
+    }
+    .history-nav a { color: #2c6ef2; text-decoration: underline; cursor: pointer; }
+    .history-nav .logout-link { margin: 0; }
+    input[type="date"] {
+      width: 100%; padding: 11px; border: 1px solid #dcdfe4; border-radius: 10px;
+      font-size: 15px; background: #fafbfc; margin-top: 6px;
+    }
+    .history-item {
+      display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid #eee;
+    }
+    .history-item img {
+      width: 64px; height: 64px; object-fit: cover; border-radius: 8px; flex-shrink: 0;
+    }
+    .history-info { font-size: 13px; color: #444; }
+    .history-info .time { font-weight: 700; color: #2c3e50; margin-bottom: 4px; }
+    .history-info a { color: #2c6ef2; text-decoration: underline; font-size: 12px; }
+    .empty-note { font-size: 13px; color: #888; padding: 14px 0; text-align: center; }
   </style>
 </head>
 <body>
@@ -87,7 +107,10 @@
       <div class="name" id="displayName"></div>
       <div class="id" id="displayId"></div>
     </div>
-    <div class="logout-link" onclick="logout()">ออกจากระบบ</div>
+    <div class="history-nav">
+      <a onclick="showHistory()">📖 ดูประวัติเช็คอิน</a>
+      <div class="logout-link" onclick="logout()">ออกจากระบบ</div>
+    </div>
 
     <label>ถ่ายรูปหน้างาน</label>
     <div class="photo-box" id="photoBox" onclick="document.getElementById('photoInput').click()">
@@ -108,6 +131,17 @@
 
     <button class="primary" id="submitBtn" disabled onclick="submitCheckin()">ส่งเช็คอิน</button>
     <div class="result" id="result"></div>
+  </div>
+
+  <!-- ===== หน้าประวัติเช็คอิน ===== -->
+  <div class="card hidden" id="historyScreen">
+    <h1>📖 ประวัติเช็คอิน</h1>
+    <div class="history-nav">
+      <a onclick="backToCheckin()">← กลับหน้าเช็คอิน</a>
+    </div>
+    <label>เลือกวันที่</label>
+    <input type="date" id="historyDate" onchange="loadHistory()">
+    <div id="historyList" style="margin-top: 14px;"><div class="empty-note">เลือกวันที่เพื่อดูประวัติ</div></div>
   </div>
 
   <script>
@@ -174,7 +208,6 @@
       const padding = fontSize * 0.8;
       const boxHeight = lineHeight * lines.length + padding * 2;
 
-      // กล่องพื้นหลังโปร่งแสงด้านล่างของรูป
       ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
       ctx.fillRect(0, canvas.height - boxHeight, canvas.width, boxHeight);
 
@@ -240,6 +273,7 @@
       document.getElementById('photoPlaceholder').textContent = '📷 แตะเพื่อถ่ายรูป';
       document.getElementById('result').style.display = 'none';
       document.getElementById('checkinScreen').classList.add('hidden');
+      document.getElementById('historyScreen').classList.add('hidden');
       document.getElementById('loginScreen').classList.remove('hidden');
     }
 
@@ -340,7 +374,6 @@
         const preview = document.getElementById('photoPreview');
         const placeholder = document.getElementById('photoPlaceholder');
 
-        // โชว์รูปดิบไปก่อนทันที ระหว่างรอประทับข้อความ
         preview.src = photoBase64;
         preview.style.display = 'block';
         placeholder.textContent = '⏳ กำลังประทับข้อความ...';
@@ -348,7 +381,7 @@
 
         try {
           const watermarked = await createWatermarkedPhoto(photoBase64, loggedInDisplayName, currentLat, currentLng);
-          preview.src = watermarked; // โชว์ preview แบบมีข้อความประทับแล้ว
+          preview.src = watermarked;
           placeholder.textContent = '✅ ถ่ายรูปแล้ว (แตะเพื่อถ่ายใหม่)';
         } catch (err) {
           placeholder.textContent = '✅ ถ่ายรูปแล้ว (แตะเพื่อถ่ายใหม่)';
@@ -362,6 +395,78 @@
       document.getElementById('submitBtn').disabled = !ready;
     }
 
+    // ===== แปลงลิงก์ Google Drive ให้โชว์เป็นรูปย่อได้ =====
+    function driveThumbnailUrl(driveViewUrl) {
+      if (!driveViewUrl) return '';
+      const match = driveViewUrl.match(/\/d\/([a-zA-Z0-9_-]+)/);
+      if (!match) return driveViewUrl;
+      return 'https://drive.google.com/thumbnail?id=' + match[1] + '&sz=w200';
+    }
+
+    // ===== หน้าประวัติเช็คอิน =====
+    function showHistory() {
+      document.getElementById('checkinScreen').classList.add('hidden');
+      document.getElementById('historyScreen').classList.remove('hidden');
+      const dateInput = document.getElementById('historyDate');
+      if (!dateInput.value) {
+        const today = new Date();
+        dateInput.value = today.toISOString().slice(0, 10);
+      }
+      loadHistory();
+    }
+
+    function backToCheckin() {
+      document.getElementById('historyScreen').classList.add('hidden');
+      document.getElementById('checkinScreen').classList.remove('hidden');
+    }
+
+    async function loadHistory() {
+      const dateStr = document.getElementById('historyDate').value;
+      const listEl = document.getElementById('historyList');
+      if (!dateStr) return;
+
+      listEl.innerHTML = '<div class="empty-note">กำลังโหลด...</div>';
+
+      try {
+        const snapshot = await db.collection('checkins').where('employeeId', '==', loggedInId).get();
+        const selectedStart = new Date(dateStr + 'T00:00:00');
+        const selectedEnd = new Date(selectedStart);
+        selectedEnd.setDate(selectedEnd.getDate() + 1);
+
+        const records = [];
+        snapshot.forEach(function(doc) {
+          const data = doc.data();
+          if (data.timestamp && data.timestamp.toDate) {
+            const t = data.timestamp.toDate();
+            if (t >= selectedStart && t < selectedEnd) {
+              records.push({ time: t, lat: data.lat, lng: data.lng, mapLink: data.mapLink, photoUrl: data.photoUrl });
+            }
+          }
+        });
+        records.sort(function(a, b) { return b.time - a.time; });
+
+        if (records.length === 0) {
+          listEl.innerHTML = '<div class="empty-note">ไม่มีข้อมูลเช็คอินวันนี้</div>';
+          return;
+        }
+
+        listEl.innerHTML = '';
+        records.forEach(function(r) {
+          const div = document.createElement('div');
+          div.className = 'history-item';
+          div.innerHTML =
+            '<img src="' + driveThumbnailUrl(r.photoUrl) + '" onerror="this.style.display=\'none\'">' +
+            '<div class="history-info">' +
+            '<div class="time">🕒 ' + r.time.toLocaleTimeString('th-TH') + '</div>' +
+            '<a href="' + r.mapLink + '" target="_blank">🗺️ เปิดแผนที่</a>' +
+            '</div>';
+          listEl.appendChild(div);
+        });
+      } catch (err) {
+        listEl.innerHTML = '<div class="empty-note">โหลดไม่สำเร็จ: ' + err.message + '</div>';
+      }
+    }
+
     async function submitCheckin() {
       const submitBtn = document.getElementById('submitBtn');
       const resultEl = document.getElementById('result');
@@ -372,18 +477,16 @@
       resultEl.style.display = 'block';
 
       try {
-        // 1) ประทับวันที่/เวลา/ชื่อ/พิกัด ลงบนรูปก่อน แล้วค่อยอัพโหลด
         const watermarkedPhoto = await createWatermarkedPhoto(photoBase64, loggedInDisplayName, currentLat, currentLng);
 
         const uploadRes = await fetch(PHOTO_UPLOAD_URL, {
           method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // เลี่ยง CORS preflight
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           body: JSON.stringify({ employeeId: loggedInId, photoBase64: watermarkedPhoto })
         });
         const uploadData = await uploadRes.json();
         if (!uploadData.success) throw new Error(uploadData.message || 'อัพโหลดรูปไม่สำเร็จ');
 
-        // 2) บันทึกข้อมูลเช็คอินลง Firestore
         const mapUrl = 'https://www.google.com/maps?q=' + currentLat + ',' + currentLng;
         await db.collection('checkins').add({
           employeeId: loggedInId,
