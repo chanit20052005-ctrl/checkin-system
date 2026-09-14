@@ -3,11 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-  <title>ระบบเช็คอินพนักงาน</title>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <!-- Firebase SDK (compat version - ใช้ง่ายไม่ต้องมี build tool) -->
+  <title>จัดการพนักงาน</title>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
   <style>
     * { box-sizing: border-box; }
@@ -19,129 +17,120 @@
       color: #1a1a1a;
     }
     .card {
-      max-width: 420px;
-      margin: 0 auto;
-      background: #fff;
-      border-radius: 16px;
-      padding: 24px;
-      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+      max-width: 480px; margin: 0 auto; background: #fff; border-radius: 16px;
+      padding: 24px; box-shadow: 0 2px 12px rgba(0,0,0,0.08);
     }
     h1 { font-size: 20px; text-align: center; margin: 0 0 20px; color: #2c3e50; }
-    label { display: block; font-size: 14px; font-weight: 600; margin: 16px 0 6px; color: #444; }
-    input[type="text"], input[type="password"] {
-      width: 100%; padding: 12px; border: 1px solid #dcdfe4; border-radius: 10px;
-      font-size: 16px; background: #fafbfc;
+    h2 { font-size: 16px; color: #2c3e50; margin: 24px 0 10px; }
+    label { display: block; font-size: 14px; font-weight: 600; margin: 14px 0 6px; color: #444; }
+    input[type="text"], input[type="password"], input[type="email"] {
+      width: 100%; padding: 11px; border: 1px solid #dcdfe4; border-radius: 10px;
+      font-size: 15px; background: #fafbfc;
     }
-    .identity-box { margin-top: 8px; background: #eef2f7; border-radius: 10px; padding: 14px; font-size: 15px; }
-    .identity-box .name { font-weight: 700; color: #2c3e50; font-size: 17px; }
-    .identity-box .id { font-size: 13px; color: #777; margin-top: 2px; }
-    .logout-link {
-      display: block; text-align: right; font-size: 12px; color: #888;
-      margin-top: 6px; cursor: pointer; text-decoration: underline;
-    }
-    .photo-box {
-      margin-top: 8px; border: 2px dashed #c3c9d1; border-radius: 12px;
-      text-align: center; padding: 20px; cursor: pointer; background: #fafbfc;
-    }
-    .photo-box img { max-width: 100%; max-height: 200px; object-fit: cover; border-radius: 8px; margin-top: 10px; }
-    #photoInput { display: none; }
-    #mapBox { display: none; margin-top: 8px; }
-    #map { height: 260px; border-radius: 12px; border: 1px solid #dcdfe4; }
-    .map-hint { font-size: 12px; color: #888; margin-top: 6px; text-align: center; }
-    .gps-status {
-      margin-top: 12px; padding: 10px 12px; border-radius: 10px; font-size: 13px;
-      background: #eef2f7; color: #555; text-align: center;
-    }
-    .gps-status.ok { background: #e6f7ee; color: #1e7e42; }
-    .gps-status.bad { background: #fdecea; color: #c0392b; }
-    #mapLinkBox { margin-top: 8px; text-align: center; display: none; }
-    #mapLink { display: inline-block; font-size: 13px; color: #2c6ef2; text-decoration: underline; }
     button.primary {
-      width: 100%; margin-top: 20px; padding: 14px; background: #2c6ef2; color: #fff;
-      border: none; border-radius: 12px; font-size: 16px; font-weight: 600; cursor: pointer;
+      width: 100%; margin-top: 16px; padding: 13px; background: #2c6ef2; color: #fff;
+      border: none; border-radius: 12px; font-size: 15px; font-weight: 600; cursor: pointer;
     }
     button.primary:disabled { background: #a9bdda; cursor: not-allowed; }
-    .result { margin-top: 16px; padding: 14px; border-radius: 12px; font-size: 14px; text-align: center; display: none; }
-    .result.success { background: #e6f7ee; color: #1e7e42; display: block; }
-    .result.error { background: #fdecea; color: #c0392b; display: block; }
-    .hidden { display: none; }
-    .history-nav {
+    .msg { margin-top: 12px; padding: 10px 12px; border-radius: 10px; font-size: 13px; display: none; }
+    .msg.ok { background: #e6f7ee; color: #1e7e42; display: block; }
+    .msg.err { background: #fdecea; color: #c0392b; display: block; }
+    .emp-row {
       display: flex; justify-content: space-between; align-items: center;
-      margin-top: 6px; font-size: 12px;
+      padding: 10px 0; border-bottom: 1px solid #eee; font-size: 14px;
     }
-    .history-nav a { color: #2c6ef2; text-decoration: underline; cursor: pointer; }
-    .history-nav .logout-link { margin: 0; }
+    .emp-row .info { color: #444; }
+    .emp-row .info .id { font-size: 12px; color: #888; }
+    .emp-row .actions { display: flex; }
+    .emp-row button.delete {
+      background: #fdecea; color: #c0392b; border: none; border-radius: 8px;
+      padding: 6px 10px; font-size: 12px; cursor: pointer;
+    }
+    .emp-row button.reset {
+      background: #eef2f7; color: #2c6ef2; border: none; border-radius: 8px;
+      padding: 6px 10px; font-size: 12px; cursor: pointer; margin-right: 6px;
+    }
+    .hidden { display: none; }
+    .empty-note { font-size: 13px; color: #888; padding: 10px 0; }
+    .logout-link {
+      display: block; text-align: right; font-size: 12px; color: #888;
+      margin-top: -10px; margin-bottom: 10px; cursor: pointer; text-decoration: underline;
+    }
+    .tabs { display: flex; gap: 8px; margin-top: 10px; }
+    .tab-btn {
+      flex: 1; padding: 10px; border: 1px solid #dcdfe4; background: #fafbfc;
+      border-radius: 10px; font-size: 14px; cursor: pointer; color: #555;
+    }
+    .tab-btn.active { background: #2c6ef2; color: #fff; border-color: #2c6ef2; }
     input[type="date"] {
       width: 100%; padding: 11px; border: 1px solid #dcdfe4; border-radius: 10px;
       font-size: 15px; background: #fafbfc; margin-top: 6px;
     }
-    .history-item {
-      display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid #eee;
+    .checkin-item {
+      display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid #eee; align-items: center;
     }
-    .history-item img {
-      width: 64px; height: 64px; object-fit: cover; border-radius: 8px; flex-shrink: 0;
+    .checkin-item img { width: 56px; height: 56px; object-fit: cover; border-radius: 8px; flex-shrink: 0; }
+    .checkin-info { font-size: 13px; color: #444; flex: 1; }
+    .checkin-info .who { font-weight: 700; color: #2c3e50; }
+    .checkin-info .time { color: #666; margin: 2px 0; }
+    .checkin-info a { color: #2c6ef2; text-decoration: underline; font-size: 12px; }
+    .checkin-actions { display: flex; flex-direction: column; gap: 4px; }
+    .checkin-actions button {
+      border: none; border-radius: 8px; padding: 5px 8px; font-size: 11px; cursor: pointer;
     }
-    .history-info { font-size: 13px; color: #444; }
-    .history-info .time { font-weight: 700; color: #2c3e50; margin-bottom: 4px; }
-    .history-info a { color: #2c6ef2; text-decoration: underline; font-size: 12px; }
-    .empty-note { font-size: 13px; color: #888; padding: 14px 0; text-align: center; }
+    .checkin-actions button.edit { background: #eef2f7; color: #2c6ef2; }
+    .checkin-actions button.delete { background: #fdecea; color: #c0392b; }
   </style>
 </head>
 <body>
 
-  <!-- ===== หน้าล็อกอิน ===== -->
+  <!-- ===== หน้าล็อกอินแอดมิน (Firebase Auth จริง) ===== -->
   <div class="card" id="loginScreen">
-    <h1>🔐 เข้าสู่ระบบ</h1>
-    <label>รหัสพนักงาน</label>
-    <input type="text" id="loginId" placeholder="กรอกรหัสพนักงาน">
+    <h1>🔑 เข้าสู่ระบบแอดมิน</h1>
+    <label>ชื่อผู้ใช้แอดมิน</label>
+    <input type="text" id="adminUsername" placeholder="เช่น chanyon.admin">
     <label>รหัสผ่าน</label>
-    <input type="password" id="loginPassword" placeholder="กรอกรหัสผ่าน">
-    <button class="primary" id="loginBtn" onclick="doLogin()">เข้าสู่ระบบ</button>
-    <div class="result" id="loginResult"></div>
+    <input type="password" id="adminPassword" placeholder="รหัสผ่าน">
+    <button class="primary" onclick="doAdminLogin()">เข้าสู่ระบบ</button>
+    <div class="msg" id="loginMsg"></div>
   </div>
 
-  <!-- ===== หน้าเช็คอิน ===== -->
-  <div class="card hidden" id="checkinScreen">
-    <h1>📍 เช็คอินพนักงาน</h1>
-    <div class="identity-box">
-      <div class="name" id="displayName"></div>
-      <div class="id" id="displayId"></div>
-    </div>
-    <div class="history-nav">
-      <a onclick="showHistory()">📖 ดูประวัติเช็คอิน</a>
-      <div class="logout-link" onclick="logout()">ออกจากระบบ</div>
+  <!-- ===== หน้าจัดการ (พนักงาน / เช็คอิน) ===== -->
+  <div class="card hidden" id="manageScreen">
+    <h1>⚙️ แผงแอดมิน</h1>
+    <div class="logout-link" onclick="doAdminLogout()">ออกจากระบบ</div>
+
+    <div class="tabs">
+      <button class="tab-btn active" id="tabBtnEmployees" onclick="switchTab('employees')">👥 พนักงาน</button>
+      <button class="tab-btn" id="tabBtnCheckins" onclick="switchTab('checkins')">📷 เช็คอิน</button>
     </div>
 
-    <label>ถ่ายรูปหน้างาน</label>
-    <div class="photo-box" id="photoBox" onclick="document.getElementById('photoInput').click()">
-      <div id="photoPlaceholder">📷 แตะเพื่อถ่ายรูป</div>
-      <input type="file" id="photoInput" accept="image/*" capture="environment">
-      <img id="photoPreview" style="display:none;">
+    <div id="employeesTab">
+      <h2 id="formTitle">เพิ่มพนักงานใหม่</h2>
+      <label>รหัสพนักงาน</label>
+      <input type="text" id="newEmpId" placeholder="เช่น 213456">
+      <label>ชื่อ-นามสกุล</label>
+      <input type="text" id="newEmpName" placeholder="เช่น สมชาย ใจดี">
+      <label>ชื่อเล่น (ไม่บังคับ)</label>
+      <input type="text" id="newEmpNickname" placeholder="เช่น ชาย">
+      <div id="passwordFieldWrapper">
+        <label>ตั้งรหัสผ่าน</label>
+        <input type="password" id="newEmpPassword" placeholder="ตั้งรหัสผ่านให้พนักงาน">
+      </div>
+      <button class="primary" id="submitEmpBtn" onclick="addEmployee()">เพิ่มพนักงาน</button>
+      <div class="logout-link hidden" id="cancelEditLink" onclick="cancelEdit()">ยกเลิกการแก้ไข</div>
+      <div class="msg" id="addMsg"></div>
+
+      <h2>รายชื่อพนักงานทั้งหมด</h2>
+      <div id="employeeList"><div class="empty-note">กำลังโหลด...</div></div>
     </div>
 
-    <div class="gps-status" id="gpsStatus">📡 กำลังขอตำแหน่ง GPS...</div>
-    <div id="mapBox">
-      <label>ปักหมุดตำแหน่งที่คุณอยู่ (สำรองเมื่อ GPS ใช้ไม่ได้)</label>
-      <div id="map"></div>
-      <div class="map-hint">แตะบนแผนที่ตรงตำแหน่งจริงของคุณ (ลากหมุดปรับได้)</div>
+    <div id="checkinsTab" class="hidden">
+      <h2>รายการเช็คอิน</h2>
+      <label>เลือกวันที่</label>
+      <input type="date" id="adminCheckinDate" onchange="loadCheckins()">
+      <div id="checkinList" style="margin-top: 14px;"><div class="empty-note">เลือกวันที่เพื่อดูรายการ</div></div>
     </div>
-    <div id="mapLinkBox">
-      <a id="mapLink" href="#" target="_blank">🗺️ เปิดดูตำแหน่งนี้บน Google Maps</a>
-    </div>
-
-    <button class="primary" id="submitBtn" disabled onclick="submitCheckin()">ส่งเช็คอิน</button>
-    <div class="result" id="result"></div>
-  </div>
-
-  <!-- ===== หน้าประวัติเช็คอิน ===== -->
-  <div class="card hidden" id="historyScreen">
-    <h1>📖 ประวัติเช็คอิน</h1>
-    <div class="history-nav">
-      <a onclick="backToCheckin()">← กลับหน้าเช็คอิน</a>
-    </div>
-    <label>เลือกวันที่</label>
-    <input type="date" id="historyDate" onchange="loadHistory()">
-    <div id="historyList" style="margin-top: 14px;"><div class="empty-note">เลือกวันที่เพื่อดูประวัติ</div></div>
   </div>
 
   <script>
@@ -154,18 +143,13 @@
       messagingSenderId: "626049253047",
       appId: "1:626049253047:web:3d5ca5ecf9968e13091732"
     };
+    const ADMIN_EMAIL_DOMAIN = "@checkin-system-learn.com"; // ต่อท้าย username แอดมินให้เป็นอีเมล
+
     firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
     const db = firebase.firestore();
 
-    // ===== ลิงก์ Apps Script สำหรับอัพโหลดรูป (ใส่ลิงก์จริงหลัง deploy) =====
-    const PHOTO_UPLOAD_URL = "https://script.google.com/macros/s/AKfycbyzQQusmVDHf0d8saSGQ3hWtEgieDOSruSAoIlDOamniwjoqcBLcsOkaYT7bSZuKDwJCQ/exec";
-
-    var currentLat = null, currentLng = null, currentAccuracy = null;
-    var photoBase64 = null;
-    var leafletMap = null, marker = null;
-    var loggedInName = null, loggedInId = null, loggedInDisplayName = null;
-
-    // ===== เข้ารหัสรหัสผ่านด้วย SHA-256 (Web Crypto API) =====
+    // ===== เข้ารหัสรหัสผ่านพนักงานด้วย SHA-256 (เหมือนฝั่ง index.html) =====
     async function sha256Hex(text) {
       const enc = new TextEncoder().encode(text);
       const hashBuffer = await crypto.subtle.digest('SHA-256', enc);
@@ -178,223 +162,67 @@
       return (crypto.randomUUID ? crypto.randomUUID() : (Math.random().toString(36) + Date.now().toString(36)));
     }
 
-    // ===== ประทับข้อความ (วันที่/เวลา, ชื่อ, พิกัด) ลงบนรูปภาพ เหมือนแอป Timestamp Camera =====
-    function loadImage(src) {
-      return new Promise(function(resolve, reject) {
-        const img = new Image();
-        img.onload = function() { resolve(img); };
-        img.onerror = reject;
-        img.src = src;
-      });
-    }
+    // ===== ล็อกอินแอดมิน =====
+    function doAdminLogin() {
+      const username = document.getElementById('adminUsername').value.trim();
+      const password = document.getElementById('adminPassword').value;
+      const msg = document.getElementById('loginMsg');
+      msg.style.display = 'none';
 
-    async function createWatermarkedPhoto(rawBase64, name, lat, lng) {
-      const img = await loadImage(rawBase64);
-      const canvas = document.createElement('canvas');
-      canvas.width = img.width;
-      canvas.height = img.height;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0);
-
-      const now = new Date();
-      const dateStr = now.toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
-      const timeStr = now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      const coordStr = (lat !== null && lng !== null) ? (lat.toFixed(6) + ', ' + lng.toFixed(6)) : 'ไม่มีพิกัด';
-
-      const lines = [name, dateStr + ' ' + timeStr, 'พิกัด: ' + coordStr];
-
-      const fontSize = Math.max(16, Math.round(canvas.width * 0.028));
-      const lineHeight = fontSize * 1.4;
-      const padding = fontSize * 0.8;
-      const boxHeight = lineHeight * lines.length + padding * 2;
-
-      // กล่องพื้นหลังโปร่งแสงด้านล่างของรูป
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
-      ctx.fillRect(0, canvas.height - boxHeight, canvas.width, boxHeight);
-
-      ctx.fillStyle = '#ffffff';
-      ctx.font = fontSize + 'px sans-serif';
-      ctx.textBaseline = 'top';
-      lines.forEach(function(line, i) {
-        ctx.fillText(line, padding, canvas.height - boxHeight + padding + i * lineHeight);
-      });
-
-      return canvas.toDataURL('image/jpeg', 0.85);
-    }
-
-    // ===== ล็อกอิน =====
-    async function doLogin() {
-      const employeeId = document.getElementById('loginId').value.trim();
-      const password = document.getElementById('loginPassword').value;
-      const resultEl = document.getElementById('loginResult');
-      resultEl.style.display = 'none';
-
-      if (!employeeId || !password) {
-        resultEl.className = 'result error';
-        resultEl.textContent = 'กรุณากรอกรหัสพนักงานและรหัสผ่าน';
-        resultEl.style.display = 'block';
+      if (!username || !password) {
+        msg.className = 'msg err';
+        msg.textContent = 'กรุณากรอกชื่อผู้ใช้และรหัสผ่าน';
+        msg.style.display = 'block';
         return;
       }
 
-      document.getElementById('loginBtn').disabled = true;
-      try {
-        const doc = await db.collection('employees').doc(employeeId).get();
-        if (!doc.exists) {
-          throw new Error('ไม่พบรหัสพนักงานนี้ในระบบ');
-        }
-        const emp = doc.data();
-        const computedHash = await hashPassword(password, emp.salt);
-        if (computedHash !== emp.passwordHash) {
-          throw new Error('รหัสผ่านไม่ถูกต้อง');
-        }
+      const email = username.includes('@') ? username : username + ADMIN_EMAIL_DOMAIN;
 
-        loggedInName = emp.name;
-        loggedInId = employeeId;
-        loggedInDisplayName = emp.nickname ? (emp.name + ' (' + emp.nickname + ')') : emp.name;
-        document.getElementById('displayName').textContent = loggedInDisplayName;
-        document.getElementById('displayId').textContent = 'รหัสพนักงาน: ' + loggedInId;
-        document.getElementById('loginScreen').classList.add('hidden');
-        document.getElementById('checkinScreen').classList.remove('hidden');
-        requestLocation();
-      } catch (err) {
-        resultEl.className = 'result error';
-        resultEl.textContent = '❌ ' + err.message;
-        resultEl.style.display = 'block';
-      } finally {
-        document.getElementById('loginBtn').disabled = false;
-      }
-    }
-
-    function logout() {
-      loggedInName = null; loggedInId = null; loggedInDisplayName = null; photoBase64 = null;
-      currentLat = null; currentLng = null; currentAccuracy = null;
-      document.getElementById('loginId').value = '';
-      document.getElementById('loginPassword').value = '';
-      document.getElementById('photoPreview').style.display = 'none';
-      document.getElementById('photoPlaceholder').textContent = '📷 แตะเพื่อถ่ายรูป';
-      document.getElementById('result').style.display = 'none';
-      document.getElementById('checkinScreen').classList.add('hidden');
-      document.getElementById('historyScreen').classList.add('hidden');
-      document.getElementById('loginScreen').classList.remove('hidden');
-    }
-
-    // ===== ขอ GPS อัตโนมัติ (รอปรับความแม่นยำสูงสุด 8 วินาที) =====
-    function requestLocation() {
-      const statusEl = document.getElementById('gpsStatus');
-      statusEl.textContent = '📡 กำลังขอตำแหน่ง GPS...';
-      statusEl.className = 'gps-status';
-
-      if (!navigator.geolocation) {
-        statusEl.textContent = '❌ อุปกรณ์นี้ไม่รองรับ GPS กรุณาปักหมุดเอง';
-        statusEl.className = 'gps-status bad';
-        showManualMap();
-        return;
-      }
-
-      let bestAccuracy = Infinity, bestLat = null, bestLng = null, watchId = null, settled = false;
-
-      function finish(lat, lng, accuracy) {
-        if (settled) return;
-        settled = true;
-        if (watchId !== null) navigator.geolocation.clearWatch(watchId);
-        setLocation(lat, lng, accuracy);
-        if (accuracy <= 100) {
-          statusEl.textContent = '✅ ยืนยันตำแหน่งด้วย GPS แล้ว (ความแม่นยำ ~' + Math.round(accuracy) + ' ม.)';
-          statusEl.className = 'gps-status ok';
-        } else {
-          statusEl.textContent = '⚠️ GPS หาตำแหน่งได้ไม่แม่นยำ (~' + Math.round(accuracy) + ' ม.) แนะนำปักหมุดเองด้านล่างเพื่อความถูกต้อง';
-          statusEl.className = 'gps-status bad';
-          showManualMap();
-        }
-      }
-      function fallbackToManual() {
-        if (settled) return;
-        settled = true;
-        if (watchId !== null) navigator.geolocation.clearWatch(watchId);
-        statusEl.textContent = '⚠️ หาตำแหน่งอัตโนมัติไม่เจอ กรุณาปักหมุดเองด้านล่าง';
-        statusEl.className = 'gps-status bad';
-        showManualMap();
-      }
-
-      watchId = navigator.geolocation.watchPosition(function(pos) {
-        const acc = pos.coords.accuracy;
-        if (acc < bestAccuracy) {
-          bestAccuracy = acc; bestLat = pos.coords.latitude; bestLng = pos.coords.longitude;
-          statusEl.textContent = '📡 กำลังปรับตำแหน่งให้แม่นยำขึ้น... (~' + Math.round(acc) + ' ม.)';
-        }
-        if (acc <= 15) finish(pos.coords.latitude, pos.coords.longitude, acc);
-      }, function() { fallbackToManual(); }, { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 });
-
-      setTimeout(function() {
-        if (settled) return;
-        if (bestLat !== null) finish(bestLat, bestLng, bestAccuracy);
-        else fallbackToManual();
-      }, 8000);
-    }
-
-    function showManualMap() {
-      document.getElementById('mapBox').style.display = 'block';
-      if (!leafletMap) {
-        leafletMap = L.map('map').setView([13.7563, 100.5018], 6);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          attribution: '&copy; OpenStreetMap contributors', maxZoom: 19
-        }).addTo(leafletMap);
-        leafletMap.on('click', function(e) {
-          setLocation(e.latlng.lat, e.latlng.lng);
-          if (marker) marker.setLatLng(e.latlng);
-          else {
-            marker = L.marker(e.latlng, { draggable: true }).addTo(leafletMap);
-            marker.on('dragend', function() {
-              const pos = marker.getLatLng();
-              setLocation(pos.lat, pos.lng);
-            });
-          }
-          document.getElementById('gpsStatus').textContent = '📍 ใช้ตำแหน่งที่ปักหมุดเอง';
-          document.getElementById('gpsStatus').className = 'gps-status ok';
+      auth.signInWithEmailAndPassword(email, password)
+        .then(function() {
+          document.getElementById('loginScreen').classList.add('hidden');
+          document.getElementById('manageScreen').classList.remove('hidden');
+          loadEmployees();
+        })
+        .catch(function(err) {
+          msg.className = 'msg err';
+          msg.textContent = '❌ เข้าสู่ระบบไม่สำเร็จ: รหัสผ่านหรือชื่อผู้ใช้ไม่ถูกต้อง';
+          msg.style.display = 'block';
         });
+    }
+
+    function doAdminLogout() {
+      auth.signOut().then(function() {
+        cancelEdit();
+        document.getElementById('manageScreen').classList.add('hidden');
+        document.getElementById('loginScreen').classList.remove('hidden');
+        document.getElementById('adminUsername').value = '';
+        document.getElementById('adminPassword').value = '';
+      });
+    }
+
+    // ===== สลับแท็บ พนักงาน / เช็คอิน =====
+    function switchTab(tab) {
+      const empTab = document.getElementById('employeesTab');
+      const checkinTab = document.getElementById('checkinsTab');
+      const empBtn = document.getElementById('tabBtnEmployees');
+      const checkinBtn = document.getElementById('tabBtnCheckins');
+
+      if (tab === 'employees') {
+        empTab.classList.remove('hidden');
+        checkinTab.classList.add('hidden');
+        empBtn.classList.add('active');
+        checkinBtn.classList.remove('active');
       } else {
-        setTimeout(function() { leafletMap.invalidateSize(); }, 100);
-      }
-    }
-
-    function setLocation(lat, lng, accuracy) {
-      currentLat = lat; currentLng = lng;
-      currentAccuracy = (typeof accuracy === 'number') ? Math.round(accuracy) : null;
-      const mapUrl = 'https://www.google.com/maps?q=' + lat + ',' + lng;
-      document.getElementById('mapLink').href = mapUrl;
-      document.getElementById('mapLinkBox').style.display = 'block';
-      checkFormReady();
-    }
-
-    document.getElementById('photoInput').addEventListener('change', function(e) {
-      const file = e.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = async function(evt) {
-        photoBase64 = evt.target.result;
-        const preview = document.getElementById('photoPreview');
-        const placeholder = document.getElementById('photoPlaceholder');
-
-        // โชว์รูปดิบไปก่อนทันที ระหว่างรอประทับข้อความ
-        preview.src = photoBase64;
-        preview.style.display = 'block';
-        placeholder.textContent = '⏳ กำลังประทับข้อความ...';
-        checkFormReady();
-
-        try {
-          const watermarked = await createWatermarkedPhoto(photoBase64, loggedInDisplayName, currentLat, currentLng);
-          preview.src = watermarked; // โชว์ preview แบบมีข้อความประทับแล้ว
-          placeholder.textContent = '✅ ถ่ายรูปแล้ว (แตะเพื่อถ่ายใหม่)';
-        } catch (err) {
-          placeholder.textContent = '✅ ถ่ายรูปแล้ว (แตะเพื่อถ่ายใหม่)';
+        empTab.classList.add('hidden');
+        checkinTab.classList.remove('hidden');
+        empBtn.classList.remove('active');
+        checkinBtn.classList.add('active');
+        if (!document.getElementById('adminCheckinDate').value) {
+          document.getElementById('adminCheckinDate').value = new Date().toISOString().slice(0, 10);
         }
-      };
-      reader.readAsDataURL(file);
-    });
-
-    function checkFormReady() {
-      const ready = photoBase64 && currentLat !== null;
-      document.getElementById('submitBtn').disabled = !ready;
+        loadCheckins();
+      }
     }
 
     // ===== แปลงลิงก์ Google Drive ให้โชว์เป็นรูปย่อได้ =====
@@ -402,35 +230,19 @@
       if (!driveViewUrl) return '';
       const match = driveViewUrl.match(/\/d\/([a-zA-Z0-9_-]+)/);
       if (!match) return driveViewUrl;
-      return 'https://drive.google.com/thumbnail?id=' + match[1] + '&sz=w200';
+      return 'https://drive.google.com/thumbnail?id=' + match[1] + '&sz=w150';
     }
 
-    // ===== หน้าประวัติเช็คอิน =====
-    function showHistory() {
-      document.getElementById('checkinScreen').classList.add('hidden');
-      document.getElementById('historyScreen').classList.remove('hidden');
-      const dateInput = document.getElementById('historyDate');
-      if (!dateInput.value) {
-        const today = new Date();
-        dateInput.value = today.toISOString().slice(0, 10); // ค่าเริ่มต้น = วันนี้
-      }
-      loadHistory();
-    }
-
-    function backToCheckin() {
-      document.getElementById('historyScreen').classList.add('hidden');
-      document.getElementById('checkinScreen').classList.remove('hidden');
-    }
-
-    async function loadHistory() {
-      const dateStr = document.getElementById('historyDate').value;
-      const listEl = document.getElementById('historyList');
+    // ===== โหลดรายการเช็คอินของวันที่เลือก (ทุกพนักงาน) =====
+    async function loadCheckins() {
+      const dateStr = document.getElementById('adminCheckinDate').value;
+      const listEl = document.getElementById('checkinList');
       if (!dateStr) return;
 
       listEl.innerHTML = '<div class="empty-note">กำลังโหลด...</div>';
 
       try {
-        const snapshot = await db.collection('checkins').where('employeeId', '==', loggedInId).get();
+        const snapshot = await db.collection('checkins').get();
         const selectedStart = new Date(dateStr + 'T00:00:00');
         const selectedEnd = new Date(selectedStart);
         selectedEnd.setDate(selectedEnd.getDate() + 1);
@@ -441,26 +253,36 @@
           if (data.timestamp && data.timestamp.toDate) {
             const t = data.timestamp.toDate();
             if (t >= selectedStart && t < selectedEnd) {
-              records.push({ time: t, lat: data.lat, lng: data.lng, mapLink: data.mapLink, photoUrl: data.photoUrl });
+              records.push({ id: doc.id, time: t, employeeName: data.employeeName, employeeId: data.employeeId, mapLink: data.mapLink, photoUrl: data.photoUrl });
             }
           }
         });
         records.sort(function(a, b) { return b.time - a.time; });
 
         if (records.length === 0) {
-          listEl.innerHTML = '<div class="empty-note">ไม่มีข้อมูลเช็คอินวันนี้</div>';
+          listEl.innerHTML = '<div class="empty-note">ไม่มีรายการเช็คอินวันนี้</div>';
           return;
         }
 
         listEl.innerHTML = '';
         records.forEach(function(r) {
           const div = document.createElement('div');
-          div.className = 'history-item';
+          div.className = 'checkin-item';
+          const timeInputVal = r.time.getFullYear() + '-' +
+            String(r.time.getMonth() + 1).padStart(2, '0') + '-' +
+            String(r.time.getDate()).padStart(2, '0') + ' ' +
+            String(r.time.getHours()).padStart(2, '0') + ':' +
+            String(r.time.getMinutes()).padStart(2, '0');
           div.innerHTML =
             '<img src="' + driveThumbnailUrl(r.photoUrl) + '" onerror="this.style.display=\'none\'">' +
-            '<div class="history-info">' +
-            '<div class="time">🕒 ' + r.time.toLocaleTimeString('th-TH') + '</div>' +
-            '<a href="' + r.mapLink + '" target="_blank">🗺️ เปิดแผนที่</a>' +
+            '<div class="checkin-info">' +
+            '<div class="who">' + (r.employeeName || '-') + ' (' + r.employeeId + ')</div>' +
+            '<div class="time">🕒 ' + r.time.toLocaleString('th-TH') + '</div>' +
+            '<a href="' + r.mapLink + '" target="_blank">🗺️ แผนที่</a>' +
+            '</div>' +
+            '<div class="checkin-actions">' +
+            '<button class="edit" onclick="editCheckinTime(\'' + r.id + '\', \'' + timeInputVal + '\')">แก้เวลา</button>' +
+            '<button class="delete" onclick="deleteCheckin(\'' + r.id + '\')">ลบ</button>' +
             '</div>';
           listEl.appendChild(div);
         });
@@ -469,52 +291,222 @@
       }
     }
 
-    async function submitCheckin() {
-      const submitBtn = document.getElementById('submitBtn');
-      const resultEl = document.getElementById('result');
-      submitBtn.disabled = true;
-      resultEl.style.display = 'none';
-      resultEl.className = 'result';
-      resultEl.textContent = 'กำลังส่งข้อมูล...';
-      resultEl.style.display = 'block';
+    // ===== แก้ไขวันที่-เวลาของรายการเช็คอิน =====
+    async function editCheckinTime(checkinId, currentTimeStr) {
+      const newTimeStr = prompt('แก้ไขวันที่-เวลา (รูปแบบ: YYYY-MM-DD HH:MM)', currentTimeStr);
+      if (!newTimeStr) return;
+
+      const parsed = new Date(newTimeStr.replace(' ', 'T'));
+      if (isNaN(parsed.getTime())) {
+        alert('❌ รูปแบบวันที่ไม่ถูกต้อง กรุณาใช้รูปแบบ YYYY-MM-DD HH:MM');
+        return;
+      }
 
       try {
-        // 1) ประทับวันที่/เวลา/ชื่อ/พิกัด ลงบนรูปก่อน แล้วค่อยอัพโหลด
-        const watermarkedPhoto = await createWatermarkedPhoto(photoBase64, loggedInDisplayName, currentLat, currentLng);
-
-        const uploadRes = await fetch(PHOTO_UPLOAD_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // เลี่ยง CORS preflight
-          body: JSON.stringify({ employeeId: loggedInId, photoBase64: watermarkedPhoto })
+        await db.collection('checkins').doc(checkinId).update({
+          timestamp: firebase.firestore.Timestamp.fromDate(parsed)
         });
-        const uploadData = await uploadRes.json();
-        if (!uploadData.success) throw new Error(uploadData.message || 'อัพโหลดรูปไม่สำเร็จ');
-
-        // 2) บันทึกข้อมูลเช็คอินลง Firestore
-        const mapUrl = 'https://www.google.com/maps?q=' + currentLat + ',' + currentLng;
-        await db.collection('checkins').add({
-          employeeId: loggedInId,
-          employeeName: loggedInName,
-          timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-          lat: currentLat,
-          lng: currentLng,
-          accuracy: currentAccuracy,
-          mapLink: mapUrl,
-          photoUrl: uploadData.url
-        });
-
-        resultEl.className = 'result success';
-        resultEl.textContent = '✅ เช็คอินสำเร็จ!';
-        document.getElementById('photoPreview').style.display = 'none';
-        document.getElementById('photoPlaceholder').textContent = '📷 แตะเพื่อถ่ายรูป';
-        photoBase64 = null;
-        checkFormReady();
+        alert('✅ แก้ไขเวลาเรียบร้อยแล้ว');
+        loadCheckins();
       } catch (err) {
-        resultEl.className = 'result error';
-        resultEl.textContent = '❌ ' + err.message;
-        submitBtn.disabled = false;
+        alert('❌ เกิดข้อผิดพลาด: ' + err.message);
       }
     }
+
+    // ===== ลบรายการเช็คอิน =====
+    async function deleteCheckin(checkinId) {
+      if (!confirm('ยืนยันลบรายการเช็คอินนี้? การลบไม่สามารถกู้คืนได้')) return;
+      try {
+        await db.collection('checkins').doc(checkinId).delete();
+        loadCheckins();
+      } catch (err) {
+        alert('❌ เกิดข้อผิดพลาด: ' + err.message);
+      }
+    }
+
+    // ===== โหลดรายชื่อพนักงาน =====
+    function loadEmployees() {
+      const listEl = document.getElementById('employeeList');
+      listEl.innerHTML = '<div class="empty-note">กำลังโหลด...</div>';
+
+      db.collection('employees').get().then(function(snapshot) {
+        if (snapshot.empty) {
+          listEl.innerHTML = '<div class="empty-note">ยังไม่มีพนักงานในระบบ</div>';
+          return;
+        }
+        listEl.innerHTML = '';
+        snapshot.forEach(function(doc) {
+          const emp = doc.data();
+          const employeeId = doc.id;
+          const displayName = emp.nickname ? (emp.name + ' (' + emp.nickname + ')') : emp.name;
+          const safeName = emp.name.replace(/'/g, "\\'");
+          const safeNickname = (emp.nickname || '').replace(/'/g, "\\'");
+          const row = document.createElement('div');
+          row.className = 'emp-row';
+          row.innerHTML =
+            '<div class="info" style="cursor:pointer;" onclick="startEdit(\'' + employeeId + '\', \'' + safeName + '\', \'' + safeNickname + '\')">' +
+            displayName + '<div class="id">รหัส: ' + employeeId + ' · แตะเพื่อแก้ไข</div></div>' +
+            '<div class="actions">' +
+            '<button class="reset" onclick="resetPassword(\'' + employeeId + '\')">รีเซ็ตรหัสผ่าน</button>' +
+            '<button class="delete" onclick="deleteEmployee(\'' + employeeId + '\')">ลบ</button>' +
+            '</div>';
+          listEl.appendChild(row);
+        });
+      }).catch(function(err) {
+        listEl.innerHTML = '<div class="empty-note">โหลดไม่สำเร็จ: ' + err.message + '</div>';
+      });
+    }
+
+    let editingEmployeeId = null;
+
+    // ===== เพิ่มพนักงานใหม่ / บันทึกการแก้ไข (ปุ่มเดียวกัน แยกโหมดกัน) =====
+    async function addEmployee() {
+      if (editingEmployeeId) {
+        return updateEmployee();
+      }
+
+      const employeeId = document.getElementById('newEmpId').value.trim();
+      const name = document.getElementById('newEmpName').value.trim();
+      const nickname = document.getElementById('newEmpNickname').value.trim();
+      const password = document.getElementById('newEmpPassword').value;
+      const msg = document.getElementById('addMsg');
+      msg.style.display = 'none';
+
+      if (!employeeId || !name || !password) {
+        msg.className = 'msg err';
+        msg.textContent = 'กรุณากรอกข้อมูลให้ครบ';
+        msg.style.display = 'block';
+        return;
+      }
+
+      try {
+        const existing = await db.collection('employees').doc(employeeId).get();
+        if (existing.exists) {
+          throw new Error('รหัสพนักงาน "' + employeeId + '" มีอยู่แล้วในระบบ');
+        }
+
+        const salt = generateSalt();
+        const hash = await hashPassword(password, salt);
+        await db.collection('employees').doc(employeeId).set({
+          name: name,
+          nickname: nickname || '',
+          passwordHash: hash,
+          salt: salt,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+
+        msg.className = 'msg ok';
+        msg.textContent = '✅ เพิ่ม "' + name + '" เรียบร้อยแล้ว';
+        msg.style.display = 'block';
+        document.getElementById('newEmpId').value = '';
+        document.getElementById('newEmpName').value = '';
+        document.getElementById('newEmpNickname').value = '';
+        document.getElementById('newEmpPassword').value = '';
+        loadEmployees();
+      } catch (err) {
+        msg.className = 'msg err';
+        msg.textContent = '❌ ' + err.message;
+        msg.style.display = 'block';
+      }
+    }
+
+    // ===== เริ่มแก้ไขพนักงาน (คลิกที่ชื่อในรายชื่อ) =====
+    function startEdit(employeeId, name, nickname) {
+      editingEmployeeId = employeeId;
+      document.getElementById('formTitle').textContent = 'แก้ไขข้อมูลพนักงาน';
+      document.getElementById('newEmpId').value = employeeId;
+      document.getElementById('newEmpId').disabled = true;
+      document.getElementById('newEmpName').value = name;
+      document.getElementById('newEmpNickname').value = nickname || '';
+      document.getElementById('passwordFieldWrapper').classList.add('hidden');
+      document.getElementById('submitEmpBtn').textContent = 'บันทึกการแก้ไข';
+      document.getElementById('cancelEditLink').classList.remove('hidden');
+      document.getElementById('addMsg').style.display = 'none';
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // ===== ยกเลิกการแก้ไข กลับไปโหมดเพิ่มพนักงาน =====
+    function cancelEdit() {
+      editingEmployeeId = null;
+      document.getElementById('formTitle').textContent = 'เพิ่มพนักงานใหม่';
+      document.getElementById('newEmpId').value = '';
+      document.getElementById('newEmpId').disabled = false;
+      document.getElementById('newEmpName').value = '';
+      document.getElementById('newEmpNickname').value = '';
+      document.getElementById('passwordFieldWrapper').classList.remove('hidden');
+      document.getElementById('submitEmpBtn').textContent = 'เพิ่มพนักงาน';
+      document.getElementById('cancelEditLink').classList.add('hidden');
+      document.getElementById('addMsg').style.display = 'none';
+    }
+
+    // ===== บันทึกการแก้ไขชื่อ/ชื่อเล่น (ไม่แตะรหัสผ่าน) =====
+    async function updateEmployee() {
+      const name = document.getElementById('newEmpName').value.trim();
+      const nickname = document.getElementById('newEmpNickname').value.trim();
+      const msg = document.getElementById('addMsg');
+      msg.style.display = 'none';
+
+      if (!name) {
+        msg.className = 'msg err';
+        msg.textContent = 'กรุณากรอกชื่อ-นามสกุล';
+        msg.style.display = 'block';
+        return;
+      }
+
+      try {
+        await db.collection('employees').doc(editingEmployeeId).update({
+          name: name,
+          nickname: nickname || ''
+        });
+        msg.className = 'msg ok';
+        msg.textContent = '✅ บันทึกการแก้ไขเรียบร้อยแล้ว';
+        msg.style.display = 'block';
+        cancelEdit();
+        loadEmployees();
+      } catch (err) {
+        msg.className = 'msg err';
+        msg.textContent = '❌ ' + err.message;
+        msg.style.display = 'block';
+      }
+    }
+
+    // ===== รีเซ็ตรหัสผ่านพนักงาน =====
+    async function resetPassword(employeeId) {
+      const newPassword = prompt('ตั้งรหัสผ่านใหม่สำหรับรหัสพนักงาน ' + employeeId + ':');
+      if (!newPassword) return;
+
+      try {
+        const salt = generateSalt();
+        const hash = await hashPassword(newPassword, salt);
+        await db.collection('employees').doc(employeeId).update({
+          passwordHash: hash,
+          salt: salt
+        });
+        alert('✅ ตั้งรหัสผ่านใหม่ให้รหัสพนักงาน ' + employeeId + ' เรียบร้อยแล้ว');
+      } catch (err) {
+        alert('❌ เกิดข้อผิดพลาด: ' + err.message);
+      }
+    }
+
+    // ===== ลบพนักงาน =====
+    async function deleteEmployee(employeeId) {
+      if (!confirm('ยืนยันลบพนักงานรหัส ' + employeeId + ' ออกจากระบบ?')) return;
+      try {
+        await db.collection('employees').doc(employeeId).delete();
+        loadEmployees();
+      } catch (err) {
+        alert('❌ เกิดข้อผิดพลาด: ' + err.message);
+      }
+    }
+
+    // ===== เช็คสถานะล็อกอินตอนเปิดหน้า (เผื่อยังไม่ได้ signOut) =====
+    auth.onAuthStateChanged(function(user) {
+      if (user) {
+        document.getElementById('loginScreen').classList.add('hidden');
+        document.getElementById('manageScreen').classList.remove('hidden');
+        loadEmployees();
+      }
+    });
   </script>
 </body>
 </html>
