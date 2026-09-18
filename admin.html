@@ -69,7 +69,6 @@
     .checkin-item {
       display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid #eee; align-items: center;
     }
-    .checkin-item img { width: 56px; height: 56px; object-fit: cover; border-radius: 8px; flex-shrink: 0; }
     .checkin-info { font-size: 13px; color: #444; flex: 1; }
     .checkin-info .who { font-weight: 700; color: #2c3e50; }
     .checkin-info .time { color: #666; margin: 2px 0; }
@@ -225,14 +224,6 @@
       }
     }
 
-    // ===== แปลงลิงก์ Google Drive ให้โชว์เป็นรูปย่อได้ =====
-    function driveThumbnailUrl(driveViewUrl) {
-      if (!driveViewUrl) return '';
-      const match = driveViewUrl.match(/\/d\/([a-zA-Z0-9_-]+)/);
-      if (!match) return driveViewUrl;
-      return 'https://drive.google.com/thumbnail?id=' + match[1] + '&sz=w150';
-    }
-
     // ===== โหลดรายการเช็คอินของวันที่เลือก (ทุกพนักงาน) =====
     async function loadCheckins() {
       const dateStr = document.getElementById('adminCheckinDate').value;
@@ -253,7 +244,7 @@
           if (data.timestamp && data.timestamp.toDate) {
             const t = data.timestamp.toDate();
             if (t >= selectedStart && t < selectedEnd) {
-              records.push({ id: doc.id, time: t, employeeName: data.employeeName, employeeId: data.employeeId, mapLink: data.mapLink, photoUrl: data.photoUrl });
+              records.push({ id: doc.id, time: t, employeeName: data.employeeName, employeeId: data.employeeId, mapLink: data.mapLink });
             }
           }
         });
@@ -274,7 +265,6 @@
             String(r.time.getHours()).padStart(2, '0') + ':' +
             String(r.time.getMinutes()).padStart(2, '0');
           div.innerHTML =
-            '<img src="' + driveThumbnailUrl(r.photoUrl) + '" onerror="this.style.display=\'none\'">' +
             '<div class="checkin-info">' +
             '<div class="who">' + (r.employeeName || '-') + ' (' + r.employeeId + ')</div>' +
             '<div class="time">🕒 ' + r.time.toLocaleString('th-TH') + '</div>' +
