@@ -39,12 +39,6 @@
       display: block; text-align: right; font-size: 12px; color: #888;
       margin-top: 6px; cursor: pointer; text-decoration: underline;
     }
-    .photo-box {
-      margin-top: 8px; border: 2px dashed #c3c9d1; border-radius: 12px;
-      text-align: center; padding: 20px; cursor: pointer; background: #fafbfc;
-    }
-    .photo-box img { max-width: 100%; max-height: 200px; object-fit: cover; border-radius: 8px; margin-top: 10px; }
-    #photoInput { display: none; }
     #mapBox { display: none; margin-top: 8px; }
     #map { height: 260px; border-radius: 12px; border: 1px solid #dcdfe4; }
     .map-hint { font-size: 12px; color: #888; margin-top: 6px; text-align: center; }
@@ -78,9 +72,6 @@
     .history-item {
       display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid #eee;
     }
-    .history-item img {
-      width: 64px; height: 64px; object-fit: cover; border-radius: 8px; flex-shrink: 0;
-    }
     .history-info { font-size: 13px; color: #444; }
     .history-info .time { font-weight: 700; color: #2c3e50; margin-bottom: 4px; }
     .history-info a { color: #2c6ef2; text-decoration: underline; font-size: 12px; }
@@ -110,13 +101,6 @@
     <div class="history-nav">
       <a onclick="showHistory()">📖 ดูประวัติเช็คอิน</a>
       <div class="logout-link" onclick="logout()">ออกจากระบบ</div>
-    </div>
-
-    <label>ถ่ายรูปหน้างาน</label>
-    <div class="photo-box" id="photoBox" onclick="document.getElementById('photoInput').click()">
-      <div id="photoPlaceholder">📷 แตะเพื่อถ่ายรูป</div>
-      <input type="file" id="photoInput" accept="image/*" capture="environment">
-      <img id="photoPreview" style="display:none;">
     </div>
 
     <div class="gps-status" id="gpsStatus">📡 กำลังขอตำแหน่ง GPS...</div>
@@ -157,11 +141,7 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
-    // ===== ลิงก์ Apps Script สำหรับอัพโหลดรูป (ใส่ลิงก์จริงหลัง deploy) =====
-    const PHOTO_UPLOAD_URL = "https://script.google.com/macros/s/AKfycbyzQQusmVDHf0d8saSGQ3hWtEgieDOSruSAoIlDOamniwjoqcBLcsOkaYT7bSZuKDwJCQ/exec";
-
     var currentLat = null, currentLng = null, currentAccuracy = null;
-    var photoBase64 = null;
     var leafletMap = null, marker = null;
     var loggedInName = null, loggedInId = null, loggedInDisplayName = null;
 
@@ -176,49 +156,6 @@
     }
     function generateSalt() {
       return (crypto.randomUUID ? crypto.randomUUID() : (Math.random().toString(36) + Date.now().toString(36)));
-    }
-
-    // ===== ประทับข้อความ (วันที่/เวลา, ชื่อ, พิกัด) ลงบนรูปภาพ เหมือนแอป Timestamp Camera =====
-    function loadImage(src) {
-      return new Promise(function(resolve, reject) {
-        const img = new Image();
-        img.onload = function() { resolve(img); };
-        img.onerror = reject;
-        img.src = src;
-      });
-    }
-
-    async function createWatermarkedPhoto(rawBase64, name, lat, lng) {
-      const img = await loadImage(rawBase64);
-      const canvas = document.createElement('canvas');
-      canvas.width = img.width;
-      canvas.height = img.height;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0);
-
-      const now = new Date();
-      const dateStr = now.toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
-      const timeStr = now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      const coordStr = (lat !== null && lng !== null) ? (lat.toFixed(6) + ', ' + lng.toFixed(6)) : 'ไม่มีพิกัด';
-
-      const lines = [name, dateStr + ' ' + timeStr, 'พิกัด: ' + coordStr];
-
-      const fontSize = Math.max(16, Math.round(canvas.width * 0.028));
-      const lineHeight = fontSize * 1.4;
-      const padding = fontSize * 0.8;
-      const boxHeight = lineHeight * lines.length + padding * 2;
-
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
-      ctx.fillRect(0, canvas.height - boxHeight, canvas.width, boxHeight);
-
-      ctx.fillStyle = '#ffffff';
-      ctx.font = fontSize + 'px sans-serif';
-      ctx.textBaseline = 'top';
-      lines.forEach(function(line, i) {
-        ctx.fillText(line, padding, canvas.height - boxHeight + padding + i * lineHeight);
-      });
-
-      return canvas.toDataURL('image/jpeg', 0.85);
     }
 
     // ===== ล็อกอิน =====
@@ -265,12 +202,10 @@
     }
 
     function logout() {
-      loggedInName = null; loggedInId = null; loggedInDisplayName = null; photoBase64 = null;
+      loggedInName = null; loggedInId = null; loggedInDisplayName = null;
       currentLat = null; currentLng = null; currentAccuracy = null;
       document.getElementById('loginId').value = '';
       document.getElementById('loginPassword').value = '';
-      document.getElementById('photoPreview').style.display = 'none';
-      document.getElementById('photoPlaceholder').textContent = '📷 แตะเพื่อถ่ายรูป';
       document.getElementById('result').style.display = 'none';
       document.getElementById('checkinScreen').classList.add('hidden');
       document.getElementById('historyScreen').classList.add('hidden');
@@ -365,42 +300,9 @@
       checkFormReady();
     }
 
-    document.getElementById('photoInput').addEventListener('change', function(e) {
-      const file = e.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = async function(evt) {
-        photoBase64 = evt.target.result;
-        const preview = document.getElementById('photoPreview');
-        const placeholder = document.getElementById('photoPlaceholder');
-
-        preview.src = photoBase64;
-        preview.style.display = 'block';
-        placeholder.textContent = '⏳ กำลังประทับข้อความ...';
-        checkFormReady();
-
-        try {
-          const watermarked = await createWatermarkedPhoto(photoBase64, loggedInDisplayName, currentLat, currentLng);
-          preview.src = watermarked;
-          placeholder.textContent = '✅ ถ่ายรูปแล้ว (แตะเพื่อถ่ายใหม่)';
-        } catch (err) {
-          placeholder.textContent = '✅ ถ่ายรูปแล้ว (แตะเพื่อถ่ายใหม่)';
-        }
-      };
-      reader.readAsDataURL(file);
-    });
-
     function checkFormReady() {
-      const ready = photoBase64 && currentLat !== null;
+      const ready = currentLat !== null;
       document.getElementById('submitBtn').disabled = !ready;
-    }
-
-    // ===== แปลงลิงก์ Google Drive ให้โชว์เป็นรูปย่อได้ =====
-    function driveThumbnailUrl(driveViewUrl) {
-      if (!driveViewUrl) return '';
-      const match = driveViewUrl.match(/\/d\/([a-zA-Z0-9_-]+)/);
-      if (!match) return driveViewUrl;
-      return 'https://drive.google.com/thumbnail?id=' + match[1] + '&sz=w200';
     }
 
     // ===== หน้าประวัติเช็คอิน =====
@@ -410,7 +312,7 @@
       const dateInput = document.getElementById('historyDate');
       if (!dateInput.value) {
         const today = new Date();
-        dateInput.value = today.toISOString().slice(0, 10);
+        dateInput.value = today.toISOString().slice(0, 10); // ค่าเริ่มต้น = วันนี้
       }
       loadHistory();
     }
@@ -439,7 +341,7 @@
           if (data.timestamp && data.timestamp.toDate) {
             const t = data.timestamp.toDate();
             if (t >= selectedStart && t < selectedEnd) {
-              records.push({ time: t, lat: data.lat, lng: data.lng, mapLink: data.mapLink, photoUrl: data.photoUrl });
+              records.push({ time: t, lat: data.lat, lng: data.lng, mapLink: data.mapLink, accuracy: data.accuracy });
             }
           }
         });
@@ -455,7 +357,6 @@
           const div = document.createElement('div');
           div.className = 'history-item';
           div.innerHTML =
-            '<img src="' + driveThumbnailUrl(r.photoUrl) + '" onerror="this.style.display=\'none\'">' +
             '<div class="history-info">' +
             '<div class="time">🕒 ' + r.time.toLocaleTimeString('th-TH') + '</div>' +
             '<a href="' + r.mapLink + '" target="_blank">🗺️ เปิดแผนที่</a>' +
@@ -477,16 +378,7 @@
       resultEl.style.display = 'block';
 
       try {
-        const watermarkedPhoto = await createWatermarkedPhoto(photoBase64, loggedInDisplayName, currentLat, currentLng);
-
-        const uploadRes = await fetch(PHOTO_UPLOAD_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({ employeeId: loggedInId, photoBase64: watermarkedPhoto })
-        });
-        const uploadData = await uploadRes.json();
-        if (!uploadData.success) throw new Error(uploadData.message || 'อัพโหลดรูปไม่สำเร็จ');
-
+        // บันทึกข้อมูลเช็คอินลง Firestore (ไม่มีรูปภาพแล้ว)
         const mapUrl = 'https://www.google.com/maps?q=' + currentLat + ',' + currentLng;
         await db.collection('checkins').add({
           employeeId: loggedInId,
@@ -495,15 +387,11 @@
           lat: currentLat,
           lng: currentLng,
           accuracy: currentAccuracy,
-          mapLink: mapUrl,
-          photoUrl: uploadData.url
+          mapLink: mapUrl
         });
 
         resultEl.className = 'result success';
         resultEl.textContent = '✅ เช็คอินสำเร็จ!';
-        document.getElementById('photoPreview').style.display = 'none';
-        document.getElementById('photoPlaceholder').textContent = '📷 แตะเพื่อถ่ายรูป';
-        photoBase64 = null;
         checkFormReady();
       } catch (err) {
         resultEl.className = 'result error';
