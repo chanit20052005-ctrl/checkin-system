@@ -244,7 +244,7 @@
           if (data.timestamp && data.timestamp.toDate) {
             const t = data.timestamp.toDate();
             if (t >= selectedStart && t < selectedEnd) {
-              records.push({ id: doc.id, time: t, employeeName: data.employeeName, employeeId: data.employeeId, mapLink: data.mapLink });
+              records.push({ id: doc.id, time: t, employeeName: data.employeeName, employeeId: data.employeeId, mapLink: data.mapLink, lat: data.lat, lng: data.lng });
             }
           }
         });
@@ -264,10 +264,12 @@
             String(r.time.getDate()).padStart(2, '0') + ' ' +
             String(r.time.getHours()).padStart(2, '0') + ':' +
             String(r.time.getMinutes()).padStart(2, '0');
+          const coordStr = (r.lat != null && r.lng != null) ? r.lat.toFixed(6) + ', ' + r.lng.toFixed(6) : '-';
           div.innerHTML =
             '<div class="checkin-info">' +
             '<div class="who">' + (r.employeeName || '-') + ' (' + r.employeeId + ')</div>' +
             '<div class="time">🕒 ' + r.time.toLocaleString('th-TH') + '</div>' +
+            '<div class="time">📍 ' + coordStr + '</div>' +
             '<a href="' + r.mapLink + '" target="_blank">🗺️ แผนที่</a>' +
             '</div>' +
             '<div class="checkin-actions">' +
