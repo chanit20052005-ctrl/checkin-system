@@ -123,9 +123,11 @@
     <div class="history-nav">
       <a onclick="backToCheckin()">← กลับหน้าเช็คอิน</a>
     </div>
-    <label>เลือกวันที่</label>
-    <input type="date" id="historyDate" onchange="loadHistory()">
-    <div id="historyList" style="margin-top: 14px;"><div class="empty-note">เลือกวันที่เพื่อดูประวัติ</div></div>
+    <label>จากวันที่</label>
+    <input type="date" id="historyDateFrom" onchange="loadHistory()">
+    <label>ถึงวันที่</label>
+    <input type="date" id="historyDateTo" onchange="loadHistory()">
+    <div id="historyList" style="margin-top: 14px;"><div class="empty-note">เลือกช่วงวันที่เพื่อดูประวัติ</div></div>
   </div>
 
   <script>
@@ -309,10 +311,12 @@
     function showHistory() {
       document.getElementById('checkinScreen').classList.add('hidden');
       document.getElementById('historyScreen').classList.remove('hidden');
-      const dateInput = document.getElementById('historyDate');
-      if (!dateInput.value) {
-        const today = new Date();
-        dateInput.value = today.toISOString().slice(0, 10); // ค่าเริ่มต้น = วันนี้
+      const fromInput = document.getElementById('historyDateFrom');
+      const toInput = document.getElementById('historyDateTo');
+      if (!fromInput.value || !toInput.value) {
+        const today = new Date().toISOString().slice(0, 10);
+        fromInput.value = today; // ค่าเริ่มต้น = วันนี้ถึงวันนี้
+        toInput.value = today;
       }
       loadHistory();
     }
@@ -323,17 +327,21 @@
     }
 
     async function loadHistory() {
-      const dateStr = document.getElementById('historyDate').value;
+      let fromStr = document.getElementById('historyDateFrom').value;
+      let toStr = document.getElementById('historyDateTo').value;
       const listEl = document.getElementById('historyList');
-      if (!dateStr) return;
+      if (!fromStr || !toStr) return;
+
+      // ถ้าเผลอเลือกวันที่ "ถึง" มาก่อนวันที่ "จาก" ให้สลับให้อัตโนมัติ
+      if (toStr < fromStr) { const tmp = fromStr; fromStr = toStr; toStr = tmp; }
 
       listEl.innerHTML = '<div class="empty-note">กำลังโหลด...</div>';
 
       try {
         const snapshot = await db.collection('checkins').where('employeeId', '==', loggedInId).get();
-        const selectedStart = new Date(dateStr + 'T00:00:00');
-        const selectedEnd = new Date(selectedStart);
-        selectedEnd.setDate(selectedEnd.getDate() + 1);
+        const selectedStart = new Date(fromStr + 'T00:00:00');
+        const selectedEnd = new Date(toStr + 'T00:00:00');
+        selectedEnd.setDate(selectedEnd.getDate() + 1); // รวมทั้งวันสุดท้ายด้วย
 
         const records = [];
         snapshot.forEach(function(doc) {
@@ -348,7 +356,7 @@
         records.sort(function(a, b) { return b.time - a.time; });
 
         if (records.length === 0) {
-          listEl.innerHTML = '<div class="empty-note">ไม่มีข้อมูลเช็คอินวันนี้</div>';
+          listEl.innerHTML = '<div class="empty-note">ไม่มีข้อมูลเช็คอินในช่วงวันที่นี้</div>';
           return;
         }
 
@@ -358,7 +366,7 @@
           div.className = 'history-item';
           div.innerHTML =
             '<div class="history-info">' +
-            '<div class="time">🕒 ' + r.time.toLocaleTimeString('th-TH') + '</div>' +
+            '<div class="time">🕒 ' + r.time.toLocaleDateString('th-TH') + ' ' + r.time.toLocaleTimeString('th-TH') + '</div>' +
             '<a href="' + r.mapLink + '" target="_blank">🗺️ เปิดแผนที่</a>' +
             '</div>';
           listEl.appendChild(div);
