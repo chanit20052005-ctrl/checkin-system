@@ -128,6 +128,8 @@
       <h2>รายการเช็คอิน</h2>
       <label>เลือกวันที่</label>
       <input type="date" id="adminCheckinDate" onchange="loadCheckins()">
+      <label>ตรวจสอบรายบุคคล (ไม่บังคับ)</label>
+      <input type="text" id="adminCheckinEmpFilter" placeholder="กรอกรหัสพนักงาน เช่น 213456" oninput="loadCheckins()">
       <div id="checkinList" style="margin-top: 14px;"><div class="empty-note">เลือกวันที่เพื่อดูรายการ</div></div>
     </div>
   </div>
@@ -224,16 +226,28 @@
       }
     }
 
-    // ===== โหลดรายการเช็คอินของวันที่เลือก (ทุกพนักงาน) =====
-    async function loadCheckins() {
+    // ===== โหลดรายการเช็คอินของวันที่เลือก (ทุกพนักงาน หรือกรองรายบุคคล) =====
+    let checkinLoadTimer = null;
+    function loadCheckins() {
+      // หน่วงเวลาเล็กน้อยตอนพิมพ์รหัสพนักงาน กันยิง query รัวทุกตัวอักษร
+      clearTimeout(checkinLoadTimer);
+      checkinLoadTimer = setTimeout(doLoadCheckins, 300);
+    }
+
+    async function doLoadCheckins() {
       const dateStr = document.getElementById('adminCheckinDate').value;
+      const empFilter = document.getElementById('adminCheckinEmpFilter').value.trim();
       const listEl = document.getElementById('checkinList');
       if (!dateStr) return;
 
       listEl.innerHTML = '<div class="empty-note">กำลังโหลด...</div>';
 
       try {
-        const snapshot = await db.collection('checkins').get();
+        // ถ้ากรอกรหัสพนักงาน ให้ค้นเฉพาะคนนั้น (ประหยัดโควตาการอ่านกว่าดึงทั้งหมด)
+        const snapshot = empFilter
+          ? await db.collection('checkins').where('employeeId', '==', empFilter).get()
+          : await db.collection('checkins').get();
+
         const selectedStart = new Date(dateStr + 'T00:00:00');
         const selectedEnd = new Date(selectedStart);
         selectedEnd.setDate(selectedEnd.getDate() + 1);
@@ -251,7 +265,7 @@
         records.sort(function(a, b) { return b.time - a.time; });
 
         if (records.length === 0) {
-          listEl.innerHTML = '<div class="empty-note">ไม่มีรายการเช็คอินวันนี้</div>';
+          listEl.innerHTML = '<div class="empty-note">' + (empFilter ? 'ไม่มีรายการเช็คอินของรหัสพนักงานนี้ในวันที่เลือก' : 'ไม่มีรายการเช็คอินวันนี้') + '</div>';
           return;
         }
 
