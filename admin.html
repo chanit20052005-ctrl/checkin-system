@@ -126,11 +126,13 @@
 
     <div id="checkinsTab" class="hidden">
       <h2>รายการเช็คอิน</h2>
-      <label>เลือกวันที่</label>
-      <input type="date" id="adminCheckinDate" onchange="loadCheckins()">
+      <label>จากวันที่</label>
+      <input type="date" id="adminCheckinDateFrom" onchange="loadCheckins()">
+      <label>ถึงวันที่</label>
+      <input type="date" id="adminCheckinDateTo" onchange="loadCheckins()">
       <label>ตรวจสอบรายบุคคล (ไม่บังคับ)</label>
       <input type="text" id="adminCheckinEmpFilter" placeholder="กรอกรหัสพนักงาน เช่น 213456" oninput="loadCheckins()">
-      <div id="checkinList" style="margin-top: 14px;"><div class="empty-note">เลือกวันที่เพื่อดูรายการ</div></div>
+      <div id="checkinList" style="margin-top: 14px;"><div class="empty-note">เลือกช่วงวันที่เพื่อดูรายการ</div></div>
     </div>
   </div>
 
@@ -219,8 +221,12 @@
         checkinTab.classList.remove('hidden');
         empBtn.classList.remove('active');
         checkinBtn.classList.add('active');
-        if (!document.getElementById('adminCheckinDate').value) {
-          document.getElementById('adminCheckinDate').value = new Date().toISOString().slice(0, 10);
+        const fromInput = document.getElementById('adminCheckinDateFrom');
+        const toInput = document.getElementById('adminCheckinDateTo');
+        if (!fromInput.value || !toInput.value) {
+          const today = new Date().toISOString().slice(0, 10);
+          fromInput.value = today;
+          toInput.value = today;
         }
         loadCheckins();
       }
@@ -235,10 +241,14 @@
     }
 
     async function doLoadCheckins() {
-      const dateStr = document.getElementById('adminCheckinDate').value;
+      let fromStr = document.getElementById('adminCheckinDateFrom').value;
+      let toStr = document.getElementById('adminCheckinDateTo').value;
       const empFilter = document.getElementById('adminCheckinEmpFilter').value.trim();
       const listEl = document.getElementById('checkinList');
-      if (!dateStr) return;
+      if (!fromStr || !toStr) return;
+
+      // ถ้าเผลอเลือกวันที่ "ถึง" มาก่อนวันที่ "จาก" ให้สลับให้อัตโนมัติ
+      if (toStr < fromStr) { const tmp = fromStr; fromStr = toStr; toStr = tmp; }
 
       listEl.innerHTML = '<div class="empty-note">กำลังโหลด...</div>';
 
@@ -248,9 +258,9 @@
           ? await db.collection('checkins').where('employeeId', '==', empFilter).get()
           : await db.collection('checkins').get();
 
-        const selectedStart = new Date(dateStr + 'T00:00:00');
-        const selectedEnd = new Date(selectedStart);
-        selectedEnd.setDate(selectedEnd.getDate() + 1);
+        const selectedStart = new Date(fromStr + 'T00:00:00');
+        const selectedEnd = new Date(toStr + 'T00:00:00');
+        selectedEnd.setDate(selectedEnd.getDate() + 1); // รวมทั้งวันสุดท้ายด้วย
 
         const records = [];
         snapshot.forEach(function(doc) {
@@ -265,7 +275,7 @@
         records.sort(function(a, b) { return b.time - a.time; });
 
         if (records.length === 0) {
-          listEl.innerHTML = '<div class="empty-note">' + (empFilter ? 'ไม่มีรายการเช็คอินของรหัสพนักงานนี้ในวันที่เลือก' : 'ไม่มีรายการเช็คอินวันนี้') + '</div>';
+          listEl.innerHTML = '<div class="empty-note">' + (empFilter ? 'ไม่มีรายการเช็คอินของรหัสพนักงานนี้ในช่วงวันที่เลือก' : 'ไม่มีรายการเช็คอินในช่วงวันที่เลือก') + '</div>';
           return;
         }
 
