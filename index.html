@@ -35,6 +35,8 @@
     .identity-box { margin-top: 8px; background: #eef2f7; border-radius: 10px; padding: 14px; font-size: 15px; }
     .identity-box .name { font-weight: 700; color: #2c3e50; font-size: 17px; }
     .identity-box .id { font-size: 13px; color: #777; margin-top: 2px; }
+    .identity-box .today { font-size: 13px; color: #777; margin-top: 8px; padding-top: 8px; border-top: 1px solid #dde3ea; }
+    .identity-box .today.done { color: #1e7e42; font-weight: 600; }
     .logout-link {
       display: block; text-align: right; font-size: 12px; color: #888;
       margin-top: 6px; cursor: pointer; text-decoration: underline;
@@ -55,10 +57,14 @@
       border: none; border-radius: 12px; font-size: 16px; font-weight: 600; cursor: pointer;
     }
     button.primary:disabled { background: #a9bdda; cursor: not-allowed; }
+    button.secondary {
+      width: 100%; margin-top: 10px; padding: 12px; background: #eef2f7; color: #2c6ef2;
+      border: 1px solid #c9d6ea; border-radius: 12px; font-size: 15px; font-weight: 600; cursor: pointer;
+    }
     .result { margin-top: 16px; padding: 14px; border-radius: 12px; font-size: 14px; text-align: center; display: none; }
     .result.success { background: #e6f7ee; color: #1e7e42; display: block; }
     .result.error { background: #fdecea; color: #c0392b; display: block; }
-    .hidden { display: none; }
+    .hidden { display: none !important; }
     .history-nav {
       display: flex; justify-content: space-between; align-items: center;
       margin-top: 6px; font-size: 12px;
@@ -97,6 +103,7 @@
     <div class="identity-box">
       <div class="name" id="displayName"></div>
       <div class="id" id="displayId"></div>
+      <div class="today" id="todayStatus">กำลังตรวจสอบการเช็คอินวันนี้...</div>
     </div>
     <div class="history-nav">
       <a onclick="showHistory()">📖 ดูประวัติเช็คอิน</a>
@@ -115,6 +122,7 @@
 
     <button class="primary" id="submitBtn" disabled onclick="submitCheckin()">ส่งเช็คอิน</button>
     <div class="result" id="result"></div>
+    <button class="secondary hidden" id="nextCheckinBtn" onclick="startNextCheckin()">📍 เช็คอินจุดถัดไป (ขอตำแหน่งใหม่)</button>
   </div>
 
   <!-- ===== หน้าประวัติเช็คอิน ===== -->
@@ -164,6 +172,7 @@
     var currentLat = null, currentLng = null, currentAccuracy = null;
     var leafletMap = null, marker = null;
     var loggedInName = null, loggedInId = null, loggedInDisplayName = null;
+    var todayCheckinCount = 0, todayLastCheckin = null; // สรุปการเช็คอินของวันนี้ (แสดงใต้ชื่อ)
     var checkedInThisSession = false; // เช็คอินสำเร็จแล้วในรอบล็อกอินนี้ (กันกดส่งซ้ำโดยไม่ตั้งใจ)
 
     // ===== เข้ารหัสรหัสผ่านด้วย SHA-256 (Web Crypto API) =====
@@ -213,6 +222,7 @@
         document.getElementById('loginScreen').classList.add('hidden');
         document.getElementById('checkinScreen').classList.remove('hidden');
         requestLocation();
+        loadTodayStatus(); // ไม่ต้องรอ ให้โหลดเบื้องหลังไปพร้อม GPS
       } catch (err) {
         resultEl.className = 'result error';
         resultEl.textContent = '❌ ' + err.message;
@@ -226,14 +236,78 @@
       loggedInName = null; loggedInId = null; loggedInDisplayName = null;
       currentLat = null; currentLng = null; currentAccuracy = null;
       checkedInThisSession = false;
+      todayCheckinCount = 0; todayLastCheckin = null;
+      document.getElementById('todayStatus').className = 'today';
+      document.getElementById('todayStatus').textContent = 'กำลังตรวจสอบการเช็คอินวันนี้...';
       document.getElementById('submitBtn').textContent = 'ส่งเช็คอิน';
       document.getElementById('submitBtn').disabled = true;
+      document.getElementById('nextCheckinBtn').classList.add('hidden');
       document.getElementById('loginId').value = '';
       document.getElementById('loginPassword').value = '';
       document.getElementById('result').style.display = 'none';
       document.getElementById('checkinScreen').classList.add('hidden');
       document.getElementById('historyScreen').classList.add('hidden');
       document.getElementById('loginScreen').classList.remove('hidden');
+    }
+
+    // ===== สถานะ "วันนี้เช็คอินแล้วหรือยัง" ใต้ชื่อพนักงาน =====
+    async function loadTodayStatus() {
+      const idAtStart = loggedInId;
+      try {
+        const snapshot = await db.collection('checkins').where('employeeId', '==', idAtStart).get();
+        if (loggedInId !== idAtStart) return; // ออกจากระบบ/เปลี่ยนคนไปแล้วระหว่างรอ
+        const start = new Date(todayLocalStr() + 'T00:00:00');
+        const end = new Date(start); end.setDate(end.getDate() + 1);
+        let count = 0, last = null;
+        snapshot.forEach(function(doc) {
+          const data = doc.data();
+          if (data.timestamp && data.timestamp.toDate) {
+            const t = data.timestamp.toDate();
+            if (t >= start && t < end) {
+              count++;
+              if (!last || t > last) last = t;
+            }
+          }
+        });
+        // ถ้าระหว่างรอโหลด พนักงานกดเช็คอินไปแล้ว ให้นับรวมด้วย
+        if (checkedInThisSession && todayLastCheckin && (!last || todayLastCheckin > last)) {
+          count = Math.max(count, todayCheckinCount); last = todayLastCheckin;
+        }
+        todayCheckinCount = count; todayLastCheckin = last;
+        renderTodayStatus();
+      } catch (err) {
+        if (loggedInId !== idAtStart) return;
+        document.getElementById('todayStatus').className = 'today';
+        document.getElementById('todayStatus').textContent = 'ตรวจสอบการเช็คอินวันนี้ไม่สำเร็จ';
+      }
+    }
+
+    function renderTodayStatus() {
+      const el = document.getElementById('todayStatus');
+      if (todayCheckinCount === 0 || !todayLastCheckin) {
+        el.className = 'today';
+        el.textContent = '⏳ วันนี้ยังไม่ได้เช็คอิน';
+        return;
+      }
+      const hhmm = String(todayLastCheckin.getHours()).padStart(2, '0') + ':' + String(todayLastCheckin.getMinutes()).padStart(2, '0');
+      el.className = 'today done';
+      el.textContent = '✅ วันนี้เช็คอินแล้วเมื่อ ' + hhmm + ' น.' + (todayCheckinCount > 1 ? ' (รวม ' + todayCheckinCount + ' ครั้ง)' : '');
+    }
+
+    // ===== เช็คอินจุดถัดไป (เช่น ไปหลายสาขาในวันเดียว) โดยไม่ต้องล็อกอินใหม่ =====
+    // ล้างตำแหน่งเก่าทิ้งทั้งหมด แล้วขอ GPS ใหม่ กันส่งพิกัดของจุดก่อนหน้าไปโดยไม่ตั้งใจ
+    function startNextCheckin() {
+      checkedInThisSession = false;
+      currentLat = null; currentLng = null; currentAccuracy = null;
+      const submitBtn = document.getElementById('submitBtn');
+      submitBtn.textContent = 'ส่งเช็คอิน';
+      submitBtn.disabled = true;
+      document.getElementById('result').style.display = 'none';
+      document.getElementById('nextCheckinBtn').classList.add('hidden');
+      document.getElementById('mapLinkBox').style.display = 'none';
+      document.getElementById('mapBox').style.display = 'none';
+      if (marker && leafletMap) { leafletMap.removeLayer(marker); marker = null; } // เอาหมุดเก่าออก
+      requestLocation();
     }
 
     // ===== ขอ GPS อัตโนมัติ (รอปรับความแม่นยำสูงสุด 8 วินาที) =====
@@ -427,8 +501,12 @@
         resultEl.className = 'result success';
         resultEl.textContent = '✅ เช็คอินสำเร็จ!';
         checkedInThisSession = true;
+        todayCheckinCount += 1;
+        todayLastCheckin = new Date();
+        renderTodayStatus();
         submitBtn.textContent = 'เช็คอินแล้ว ✓';
         submitBtn.disabled = true;
+        document.getElementById('nextCheckinBtn').classList.remove('hidden');
       } catch (err) {
         resultEl.className = 'result error';
         resultEl.textContent = '❌ ' + err.message;
