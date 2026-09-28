@@ -151,6 +151,38 @@
     .emp-form .note { font-size: 12px; color: var(--muted); line-height: 1.5; }
     .emp-search { width: 300px; }
 
+    /* ===== หน้าต่างยืนยัน/แก้ไข (แทนกล่องเด้งของเบราว์เซอร์) ===== */
+    .modal-backdrop {
+      position: fixed; inset: 0; background: rgba(27,31,35,0.45); z-index: 50;
+      display: flex; align-items: center; justify-content: center; padding: 16px;
+    }
+    .modal {
+      background: #fff; border-radius: 18px; width: 100%; max-width: 440px; max-height: calc(100vh - 32px); overflow: auto;
+      padding: 22px 20px 18px; display: flex; flex-direction: column; gap: 14px; box-shadow: 0 18px 50px rgba(0,0,0,0.25);
+    }
+    .modal h3 { margin: 0; font-size: 19px; }
+    .modal .info { background: #F7F6F2; border-radius: 12px; padding: 10px 12px; font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
+    .modal .info b { font-weight: 600; }
+    .modal .warn-box { background: var(--err-soft); color: var(--err); border-radius: 12px; padding: 10px 12px; font-size: 14px; line-height: 1.6; }
+    .modal .row2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .modal .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; flex-wrap: wrap; }
+    .btn-secondary {
+      min-height: 44px; border: 1px solid var(--line); border-radius: 12px; padding: 0 16px; background: #fff;
+      color: var(--ink); font-size: 15px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    }
+    .btn-secondary:disabled { color: var(--muted); cursor: not-allowed; }
+    .btn-danger { background: var(--err); }
+    .btn-danger:disabled { background: #E3AFAA; }
+    .modal .err-text { color: var(--err); font-size: 13px; min-height: 0; }
+    .modal .show-pw { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; margin: 0; cursor: pointer; }
+    .modal .show-pw input { width: 18px; height: 18px; margin: 0; }
+    .toast {
+      position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 60;
+      background: var(--ink); color: #fff; padding: 12px 18px; border-radius: 12px; font-size: 14px; max-width: calc(100vw - 32px);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+    }
+    .toast.err { background: var(--err); }
+
     /* ===== มือถือ / จอแคบ ===== */
     @media (max-width: 900px) {
       .app { display: block; }
@@ -190,6 +222,11 @@
       .e-row .e-act { justify-content: flex-start; margin-left: -8px; }
       .export-bar { position: fixed; left: 0; right: 0; bottom: 0; padding: 10px 16px 14px; background: linear-gradient(rgba(244,242,238,0), var(--bg) 30%); z-index: 5; }
       .export-bar .btn-primary { width: 100%; min-height: 50px; }
+      .modal-backdrop { align-items: flex-end; padding: 0; }
+      .modal { max-width: none; border-radius: 18px 18px 0 0; padding-bottom: 24px; max-height: 92vh; }
+      .modal .actions { flex-direction: column-reverse; }
+      .modal .actions button { width: 100%; }
+      .toast { bottom: 84px; }
     }
   </style>
 </head>
@@ -355,6 +392,10 @@
     </main>
   </div>
 
+  <!-- หน้าต่างยืนยัน/แก้ไข (สร้างเนื้อหาด้วย JS) และแถบแจ้งผล -->
+  <div class="modal-backdrop hidden" id="modalBackdrop"><div class="modal" id="modalBox" role="dialog" aria-modal="true" aria-labelledby="modalTitle"></div></div>
+  <div class="toast hidden" id="toast" role="status"></div>
+
   <script>
     // ===== ตั้งค่า Firebase =====
     const firebaseConfig = {
@@ -401,6 +442,91 @@
     }
     function generateSalt() {
       return (crypto.randomUUID ? crypto.randomUUID() : (Math.random().toString(36) + Date.now().toString(36)));
+    }
+
+    // ===== แถบแจ้งผลมุมจอ (แทน alert) =====
+    let toastTimer = null;
+    function showToast(text, isError) {
+      const el = document.getElementById('toast');
+      el.textContent = text;
+      el.className = 'toast' + (isError ? ' err' : '');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(function() { el.classList.add('hidden'); }, isError ? 5000 : 3000);
+    }
+
+    // ===== หน้าต่างในหน้าเว็บ (แทน prompt/confirm) =====
+    // สร้าง element แบบปลอดภัย: ข้อความทั้งหมดใส่ผ่าน textContent เท่านั้น
+    function el(tag, attrs, children) {
+      const node = document.createElement(tag);
+      Object.keys(attrs || {}).forEach(function(k) {
+        if (k === 'text') node.textContent = attrs[k];
+        else if (k === 'class') node.className = attrs[k];
+        else if (k.indexOf('on') === 0) node.addEventListener(k.slice(2), attrs[k]);
+        else node.setAttribute(k, attrs[k]);
+      });
+      (children || []).forEach(function(c) { if (c) node.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); });
+      return node;
+    }
+    let modalBusy = false;
+    function openModal(children) {
+      const box = document.getElementById('modalBox');
+      box.innerHTML = '';
+      children.forEach(function(c) { if (c) box.appendChild(c); });
+      modalBusy = false;
+      document.getElementById('modalBackdrop').classList.remove('hidden');
+      const first = box.querySelector('input, button');
+      if (first) setTimeout(function() { first.focus(); }, 30);
+    }
+    function closeModal() {
+      if (modalBusy) return; // กำลังบันทึก/ลบอยู่ ห้ามปิดกลางทาง
+      document.getElementById('modalBackdrop').classList.add('hidden');
+      document.getElementById('modalBox').innerHTML = '';
+    }
+    document.getElementById('modalBackdrop').addEventListener('click', function(e) {
+      if (e.target === this) closeModal(); // แตะพื้นที่มืดรอบ ๆ = ปิด
+    });
+    document.getElementById('modalBackdrop').addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') closeModal();
+    });
+    function modalButtons(cancelText, okText, okClass, onOk) {
+      const ok = el('button', { class: 'btn-primary ' + (okClass || ''), text: okText, onclick: onOk });
+      const cancel = el('button', { class: 'btn-secondary', text: cancelText, onclick: closeModal });
+      return { row: el('div', { class: 'actions' }, [cancel, ok]), ok: ok, cancel: cancel };
+    }
+
+    // ===== สร้างไฟล์ CSV จากรายการเช็คอินแล้วดาวน์โหลด (ใช้ทั้งปุ่มดาวน์โหลด และตอนลบพนักงาน) =====
+    function downloadCheckinsCsv(records, fileName) {
+      // ครอบทุกช่องด้วย "..." และกันสูตร Excel แปลกปลอม (ค่าที่ขึ้นต้นด้วย = + - @)
+      const cell = function(value) {
+        let v = String(value == null ? '' : value);
+        if (/^[=+\-@\t\r]/.test(v)) v = "'" + v;
+        return '"' + v.replace(/"/g, '""') + '"';
+      };
+      const rows = [['วันที่', 'เวลา', 'รหัสพนักงาน', 'ชื่อ', 'ละติจูด', 'ลองจิจูด', 'ความแม่นยำ (เมตร)', 'ลิงก์แผนที่']];
+      // เรียงจากเก่าไปใหม่ อ่านง่ายกว่าใน Excel
+      records.slice().sort(function(a, b) { return a.time - b.time; }).forEach(function(r) {
+        const t = r.time;
+        rows.push([
+          dateStr(t),
+          pad2(t.getHours()) + ':' + pad2(t.getMinutes()) + ':' + pad2(t.getSeconds()),
+          r.employeeId,
+          r.employeeName,
+          typeof r.lat === 'number' ? r.lat.toFixed(6) : '',
+          typeof r.lng === 'number' ? r.lng.toFixed(6) : '',
+          typeof r.accuracy === 'number' ? r.accuracy : '-',
+          safeUrl(r.mapLink) === '#' ? '' : r.mapLink
+        ]);
+      });
+      // \uFEFF = BOM ทำให้ Excel อ่านภาษาไทยถูกต้อง
+      const csv = '\uFEFF' + rows.map(function(row) { return row.map(cell).join(','); }).join('\r\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(function() { URL.revokeObjectURL(a.href); }, 1000);
     }
 
     // ===== ข้อมูลที่โหลดไว้ในหน้า =====
@@ -641,7 +767,6 @@
       shown.forEach(function(r) {
         const div = document.createElement('div');
         div.className = 't-row';
-        const timeInputVal = dateStr(r.time) + ' ' + pad2(r.time.getHours()) + ':' + pad2(r.time.getMinutes());
         const coordStr = (typeof r.lat === 'number' && typeof r.lng === 'number') ? r.lat.toFixed(6) + ', ' + r.lng.toFixed(6) : '-';
         const isGps = typeof r.accuracy === 'number';
         const nick = nicknameOf(r.employeeId);
@@ -657,8 +782,8 @@
             '<button class="btn-text danger delete">ลบ</button>' +
           '</div>';
         // ผูกปุ่มด้วย addEventListener แทนการต่อข้อความใน onclick (ปลอดภัยกว่า)
-        div.querySelector('button.edit').addEventListener('click', function() { editCheckinTime(r.id, timeInputVal); });
-        div.querySelector('button.delete').addEventListener('click', function() { deleteCheckin(r.id); });
+        div.querySelector('button.edit').addEventListener('click', function() { editCheckinTime(r); });
+        div.querySelector('button.delete').addEventListener('click', function() { deleteCheckin(r); });
         listEl.appendChild(div);
       });
     }
@@ -666,72 +791,71 @@
     // ===== ดาวน์โหลดรายการเช็คอินที่แสดงอยู่เป็นไฟล์ CSV (เปิดด้วย Excel ได้, ไม่อ่าน Firestore เพิ่ม) =====
     function exportCheckinsCsv() {
       if (lastLoadedCheckins.length === 0) return;
-      // ครอบทุกช่องด้วย "..." และกันสูตร Excel แปลกปลอม (ค่าที่ขึ้นต้นด้วย = + - @)
-      const cell = function(value) {
-        let v = String(value == null ? '' : value);
-        if (/^[=+\-@\t\r]/.test(v)) v = "'" + v;
-        return '"' + v.replace(/"/g, '""') + '"';
-      };
-      const rows = [['วันที่', 'เวลา', 'รหัสพนักงาน', 'ชื่อ', 'ละติจูด', 'ลองจิจูด', 'ความแม่นยำ (เมตร)', 'ลิงก์แผนที่']];
-      // เรียงจากเก่าไปใหม่ อ่านง่ายกว่าใน Excel
-      lastLoadedCheckins.slice().sort(function(a, b) { return a.time - b.time; }).forEach(function(r) {
-        const t = r.time;
-        rows.push([
-          dateStr(t),
-          pad2(t.getHours()) + ':' + pad2(t.getMinutes()) + ':' + pad2(t.getSeconds()),
-          r.employeeId,
-          r.employeeName,
-          typeof r.lat === 'number' ? r.lat.toFixed(6) : '',
-          typeof r.lng === 'number' ? r.lng.toFixed(6) : '',
-          typeof r.accuracy === 'number' ? r.accuracy : '-',
-          safeUrl(r.mapLink) === '#' ? '' : r.mapLink
-        ]);
-      });
-      // \uFEFF = BOM ทำให้ Excel อ่านภาษาไทยถูกต้อง
-      const csv = '\uFEFF' + rows.map(function(row) { return row.map(cell).join(','); }).join('\r\n');
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
       const empPart = lastLoadedRange.emp ? '_' + lastLoadedRange.emp.replace(/[^A-Za-z0-9_-]/g, '') : '';
       const fileName = 'checkins_' + lastLoadedRange.from + '_to_' + lastLoadedRange.to + (empPart === '_' ? '_filtered' : empPart) + '.csv';
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = fileName;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(function() { URL.revokeObjectURL(a.href); }, 1000);
+      downloadCheckinsCsv(lastLoadedCheckins, fileName);
     }
 
-    // ===== แก้ไขวันที่-เวลาของรายการเช็คอิน =====
-    async function editCheckinTime(checkinId, currentTimeStr) {
-      const newTimeStr = prompt('แก้ไขวันที่-เวลา (รูปแบบ: YYYY-MM-DD HH:MM)', currentTimeStr);
-      if (!newTimeStr) return;
-
-      const parsed = new Date(newTimeStr.trim().replace(' ', 'T'));
-      if (isNaN(parsed.getTime())) {
-        alert('รูปแบบวันที่ไม่ถูกต้อง กรุณาใช้รูปแบบ YYYY-MM-DD HH:MM');
-        return;
-      }
-
-      try {
-        await db.collection('checkins').doc(checkinId).update({
-          timestamp: firebase.firestore.Timestamp.fromDate(parsed)
-        });
-        alert('แก้ไขเวลาเรียบร้อยแล้ว');
-        loadCheckins();
-      } catch (err) {
-        alert('เกิดข้อผิดพลาด: ' + err.message);
-      }
+    // ===== แก้ไขวันที่-เวลาของรายการเช็คอิน (หน้าต่างเลือกวันที่ + เวลา) =====
+    function editCheckinTime(r) {
+      const dateInput = el('input', { type: 'date', id: 'editDate' });
+      const timeInput = el('input', { type: 'time', id: 'editTime', step: '60' });
+      dateInput.value = dateStr(r.time);
+      timeInput.value = pad2(r.time.getHours()) + ':' + pad2(r.time.getMinutes());
+      const errText = el('div', { class: 'err-text' });
+      const btns = modalButtons('ยกเลิก', 'บันทึกเวลาใหม่', '', async function() {
+        if (!dateInput.value || !timeInput.value) { errText.textContent = 'กรุณาเลือกทั้งวันที่และเวลา'; return; }
+        const parsed = new Date(dateInput.value + 'T' + timeInput.value.slice(0, 5) + ':00');
+        if (isNaN(parsed.getTime())) { errText.textContent = 'วันที่หรือเวลาไม่ถูกต้อง'; return; }
+        modalBusy = true; btns.ok.disabled = true; btns.cancel.disabled = true; btns.ok.textContent = 'กำลังบันทึก...';
+        try {
+          await db.collection('checkins').doc(r.id).update({ timestamp: firebase.firestore.Timestamp.fromDate(parsed) });
+          modalBusy = false; closeModal();
+          showToast('แก้เวลาเรียบร้อยแล้ว');
+          loadCheckins();
+        } catch (err) {
+          modalBusy = false; btns.ok.disabled = false; btns.cancel.disabled = false; btns.ok.textContent = 'บันทึกเวลาใหม่';
+          errText.textContent = 'เกิดข้อผิดพลาด: ' + err.message;
+        }
+      });
+      openModal([
+        el('h3', { id: 'modalTitle', text: 'แก้เวลาเช็คอิน' }),
+        el('div', { class: 'info' }, [
+          el('b', { text: (r.employeeName || '-') }), ' · รหัส ' + (r.employeeId || '-'),
+          el('br'), 'เวลาเดิม: ' + r.time.toLocaleString('th-TH')
+        ]),
+        el('div', { class: 'row2' }, [
+          el('div', {}, [el('label', { for: 'editDate', text: 'วันที่' }), dateInput]),
+          el('div', {}, [el('label', { for: 'editTime', text: 'เวลา' }), timeInput])
+        ]),
+        errText, btns.row
+      ]);
     }
 
-    // ===== ลบรายการเช็คอิน =====
-    async function deleteCheckin(checkinId) {
-      if (!confirm('ยืนยันลบรายการเช็คอินนี้? การลบไม่สามารถกู้คืนได้')) return;
-      try {
-        await db.collection('checkins').doc(checkinId).delete();
-        loadCheckins();
-      } catch (err) {
-        alert('เกิดข้อผิดพลาด: ' + err.message);
-      }
+    // ===== ลบรายการเช็คอิน (หน้าต่างยืนยัน) =====
+    function deleteCheckin(r) {
+      const errText = el('div', { class: 'err-text' });
+      const btns = modalButtons('ยกเลิก', 'ลบรายการนี้', 'btn-danger', async function() {
+        modalBusy = true; btns.ok.disabled = true; btns.cancel.disabled = true; btns.ok.textContent = 'กำลังลบ...';
+        try {
+          await db.collection('checkins').doc(r.id).delete();
+          modalBusy = false; closeModal();
+          showToast('ลบรายการเช็คอินแล้ว');
+          loadCheckins();
+        } catch (err) {
+          modalBusy = false; btns.ok.disabled = false; btns.cancel.disabled = false; btns.ok.textContent = 'ลบรายการนี้';
+          errText.textContent = 'เกิดข้อผิดพลาด: ' + err.message;
+        }
+      });
+      openModal([
+        el('h3', { id: 'modalTitle', text: 'ลบรายการเช็คอิน?' }),
+        el('div', { class: 'info' }, [
+          el('b', { text: (r.employeeName || '-') }), ' · รหัส ' + (r.employeeId || '-'),
+          el('br'), 'เวลา: ' + r.time.toLocaleString('th-TH')
+        ]),
+        el('div', { class: 'warn-box', text: 'ลบแล้วกู้คืนไม่ได้' }),
+        errText, btns.row
+      ]);
     }
 
     // ===== โหลดรายชื่อพนักงาน (เก็บไว้ใช้ทั้งแท็บพนักงาน และตัวเลขสรุปในแท็บเช็คอิน) =====
@@ -916,33 +1040,120 @@
       }
     }
 
-    // ===== รีเซ็ตรหัสผ่านพนักงาน =====
-    async function resetPassword(employeeId) {
-      const newPassword = prompt('ตั้งรหัสผ่านใหม่สำหรับรหัสพนักงาน ' + employeeId + ':');
-      if (!newPassword) return;
-
-      try {
-        const salt = generateSalt();
-        const hash = await hashPassword(newPassword, salt);
-        await db.collection('employees').doc(employeeId).update({
-          passwordHash: hash,
-          salt: salt
-        });
-        alert('ตั้งรหัสผ่านใหม่ให้รหัสพนักงาน ' + employeeId + ' เรียบร้อยแล้ว');
-      } catch (err) {
-        alert('เกิดข้อผิดพลาด: ' + err.message);
-      }
+    function employeeById(employeeId) {
+      return employeesCache.find(function(e) { return e.id === employeeId; }) || { id: employeeId, name: '', nickname: '' };
+    }
+    function employeeLabel(e) {
+      return (e.name || '-') + (e.nickname ? ' (' + e.nickname + ')' : '');
     }
 
-    // ===== ลบพนักงาน =====
+    // ===== รีเซ็ตรหัสผ่านพนักงาน (หน้าต่าง: รหัสใหม่ + ยืนยันอีกครั้ง) =====
+    function resetPassword(employeeId) {
+      const emp = employeeById(employeeId);
+      const pw1 = el('input', { type: 'password', id: 'resetPw1', autocomplete: 'new-password', placeholder: 'รหัสผ่านใหม่' });
+      const pw2 = el('input', { type: 'password', id: 'resetPw2', autocomplete: 'new-password', placeholder: 'พิมพ์รหัสผ่านใหม่อีกครั้ง' });
+      const showBox = el('input', { type: 'checkbox', onchange: function() {
+        pw1.type = pw2.type = showBox.checked ? 'text' : 'password';
+      } });
+      const errText = el('div', { class: 'err-text' });
+      const btns = modalButtons('ยกเลิก', 'ตั้งรหัสผ่านใหม่', '', async function() {
+        if (!pw1.value) { errText.textContent = 'กรุณากรอกรหัสผ่านใหม่'; return; }
+        if (pw1.value !== pw2.value) { errText.textContent = 'รหัสผ่านทั้งสองช่องไม่ตรงกัน'; return; }
+        modalBusy = true; btns.ok.disabled = true; btns.cancel.disabled = true; btns.ok.textContent = 'กำลังบันทึก...';
+        try {
+          const salt = generateSalt();
+          const hash = await hashPassword(pw1.value, salt);
+          await db.collection('employees').doc(employeeId).update({ passwordHash: hash, salt: salt });
+          modalBusy = false; closeModal();
+          showToast('ตั้งรหัสผ่านใหม่ให้รหัส ' + employeeId + ' แล้ว');
+        } catch (err) {
+          modalBusy = false; btns.ok.disabled = false; btns.cancel.disabled = false; btns.ok.textContent = 'ตั้งรหัสผ่านใหม่';
+          errText.textContent = 'เกิดข้อผิดพลาด: ' + err.message;
+        }
+      });
+      pw2.addEventListener('keydown', function(e) { if (e.key === 'Enter') btns.ok.click(); });
+      openModal([
+        el('h3', { id: 'modalTitle', text: 'รีเซ็ตรหัสผ่าน' }),
+        el('div', { class: 'info' }, [el('b', { text: employeeLabel(emp) }), ' · รหัส ' + employeeId]),
+        el('div', {}, [el('label', { for: 'resetPw1', text: 'รหัสผ่านใหม่' }), pw1]),
+        el('div', {}, [el('label', { for: 'resetPw2', text: 'ยืนยันรหัสผ่านใหม่' }), pw2]),
+        el('label', { class: 'show-pw' }, [showBox, 'แสดงรหัสผ่านที่พิมพ์']),
+        errText, btns.row
+      ]);
+    }
+
+    // ===== ลบพนักงาน + ประวัติเช็คอินทั้งหมดของคนนั้น (หน้าต่างยืนยัน ต้องพิมพ์รหัสให้ตรง) =====
     async function deleteEmployee(employeeId) {
-      if (!confirm('ยืนยันลบพนักงานรหัส ' + employeeId + ' ออกจากระบบ?')) return;
+      const emp = employeeById(employeeId);
+      let history = null; // รายการเช็คอินทั้งหมดของคนนี้ (โหลดตอนเปิดหน้าต่าง)
+      const countText = el('div', { class: 'warn-box', text: 'กำลังนับประวัติเช็คอินของคนนี้...' });
+      const dlBtn = el('button', { class: 'btn-secondary', text: 'ดาวน์โหลดประวัติของคนนี้เก็บไว้ก่อน (Excel)', disabled: 'disabled', onclick: function() {
+        if (!history || history.length === 0) return;
+        downloadCheckinsCsv(history, 'checkins_' + (String(employeeId).replace(/[^A-Za-z0-9_-]/g, '') || 'employee') + '_all_before_delete.csv');
+        showToast('ดาวน์โหลดไฟล์แล้ว');
+      } });
+      const confirmInput = el('input', { type: 'text', id: 'confirmDeleteId', autocomplete: 'off', placeholder: employeeId });
+      const errText = el('div', { class: 'err-text' });
+      const btns = modalButtons('ยกเลิก', 'ลบถาวร', 'btn-danger', async function() {
+        if (confirmInput.value.trim() !== employeeId || history === null) return;
+        modalBusy = true; btns.ok.disabled = true; btns.cancel.disabled = true; dlBtn.disabled = true; confirmInput.disabled = true;
+        try {
+          // ลบเช็คอินก่อน ทีละชุด (Firestore จำกัด 500 รายการต่อชุด) แล้วค่อยลบตัวพนักงาน
+          // ถ้าพังกลางทาง ตัวพนักงานยังอยู่ กดลบซ้ำได้
+          const ids = history.map(function(h) { return h.id; });
+          for (let i = 0; i < ids.length; i += 400) {
+            btns.ok.textContent = 'กำลังลบ... (' + Math.min(i + 400, ids.length) + '/' + ids.length + ')';
+            const batch = db.batch();
+            ids.slice(i, i + 400).forEach(function(id) { batch.delete(db.collection('checkins').doc(id)); });
+            await batch.commit();
+          }
+          btns.ok.textContent = 'กำลังลบข้อมูลพนักงาน...';
+          await db.collection('employees').doc(employeeId).delete();
+          modalBusy = false; closeModal();
+          if (editingEmployeeId === employeeId) cancelEdit();
+          showToast('ลบรหัส ' + employeeId + ' พร้อมประวัติ ' + ids.length + ' รายการแล้ว');
+          loadEmployees();
+          if (rangeLoaded.from) loadCheckins();
+        } catch (err) {
+          modalBusy = false; btns.cancel.disabled = false; confirmInput.disabled = false; dlBtn.disabled = !(history && history.length);
+          btns.ok.textContent = 'ลบถาวร'; btns.ok.disabled = confirmInput.value.trim() !== employeeId;
+          errText.textContent = 'ลบไม่สำเร็จ: ' + err.message + ' (ข้อมูลบางส่วนอาจถูกลบไปแล้ว กดลบซ้ำได้)';
+          try { await refreshHistory(); } catch (e) {}
+        }
+      });
+      btns.ok.disabled = true;
+      confirmInput.addEventListener('input', function() {
+        btns.ok.disabled = confirmInput.value.trim() !== employeeId || history === null;
+      });
+
+      async function refreshHistory() {
+        const snap = await db.collection('checkins').where('employeeId', '==', employeeId).get();
+        const list = [];
+        snap.forEach(function(doc) {
+          const d = doc.data();
+          list.push({ id: doc.id, time: (d.timestamp && d.timestamp.toDate) ? d.timestamp.toDate() : new Date(0),
+            employeeId: d.employeeId, employeeName: d.employeeName, lat: d.lat, lng: d.lng, accuracy: d.accuracy, mapLink: d.mapLink });
+        });
+        history = list;
+        countText.textContent = list.length > 0
+          ? 'จะลบพนักงานคนนี้ พร้อมประวัติเช็คอินทั้งหมด ' + list.length + ' รายการ ลบแล้วกู้คืนไม่ได้'
+          : 'จะลบพนักงานคนนี้ (ไม่มีประวัติเช็คอิน) ลบแล้วกู้คืนไม่ได้';
+        dlBtn.disabled = list.length === 0;
+        btns.ok.disabled = confirmInput.value.trim() !== employeeId;
+      }
+
+      openModal([
+        el('h3', { id: 'modalTitle', text: 'ลบพนักงานถาวร' }),
+        el('div', { class: 'info' }, [el('b', { text: employeeLabel(emp) }), ' · รหัส ' + employeeId]),
+        countText,
+        dlBtn,
+        el('div', {}, [el('label', { for: 'confirmDeleteId', text: 'พิมพ์รหัสพนักงาน "' + employeeId + '" เพื่อยืนยัน' }), confirmInput]),
+        errText, btns.row
+      ]);
       try {
-        await db.collection('employees').doc(employeeId).delete();
-        if (editingEmployeeId === employeeId) cancelEdit();
-        loadEmployees();
+        await refreshHistory();
       } catch (err) {
-        alert('เกิดข้อผิดพลาด: ' + err.message);
+        countText.textContent = 'นับประวัติเช็คอินไม่สำเร็จ: ' + err.message + ' (ปิดหน้าต่างแล้วลองใหม่)';
       }
     }
 
