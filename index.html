@@ -130,6 +130,12 @@
     }
     .gps-status.ok { background: var(--accent-soft); color: var(--accent-dark); }
     .gps-status.bad { background: var(--warn-soft); color: var(--warn); }
+    .btn-retry {
+      margin-top: 8px; min-height: 44px; padding: 8px 14px; border-radius: 12px;
+      border: 1px solid var(--line); background: #fff; color: var(--ink);
+      font-size: 14px; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; cursor: pointer;
+    }
+    .gps-help { font-size: 12px; margin-top: 6px; line-height: 1.5; }
     #mapBox { display: none; margin-top: 10px; }
     #map { height: 240px; border-radius: 12px; border: 1px solid var(--line); z-index: 0; }
     .map-hint { font-size: 12px; margin-top: 6px; }
@@ -205,6 +211,11 @@
         <div class="tl-body">
           <div class="tl-current-title" id="currentTitle">จุดที่ 1 (จุดปัจจุบัน)</div>
           <div class="gps-status" id="gpsStatus">กำลังขอตำแหน่ง GPS...</div>
+          <div class="gps-help muted hidden" id="gpsHelp"></div>
+          <div><button class="btn-retry hidden" id="retryGpsBtn" onclick="retryLocation()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"></path><path d="M21 3v6h-6"></path></svg>
+            ลองหาตำแหน่งอีกครั้ง
+          </button></div>
           <div id="mapBox">
             <div id="map"></div>
             <div class="map-hint muted">แตะบนแผนที่ตรงตำแหน่งจริงของคุณ (ลากหมุดปรับได้)</div>
@@ -513,16 +524,32 @@
       requestLocation();
     }
 
+    // ===== ปุ่ม "ลองหาตำแหน่งอีกครั้ง" (เช่น ลืมเปิด GPS แล้วเพิ่งเปิด) — ไม่ต้องออกจากระบบ/รีเฟรชหน้า =====
+    function retryLocation() {
+      if (checkedInThisSession) return;
+      currentLat = null; currentLng = null; currentAccuracy = null;
+      document.getElementById('submitBtn').disabled = true;
+      document.getElementById('mapLinkBox').style.display = 'none';
+      document.getElementById('mapBox').style.display = 'none';
+      if (marker && leafletMap) { leafletMap.removeLayer(marker); marker = null; }
+      requestLocation();
+    }
+
     // ===== ขอ GPS อัตโนมัติ (รอปรับความแม่นยำสูงสุด 8 วินาที) =====
     function requestLocation() {
       const myRun = ++gpsRun;
       const statusEl = document.getElementById('gpsStatus');
+      const helpEl = document.getElementById('gpsHelp');
+      const retryBtn = document.getElementById('retryGpsBtn');
       statusEl.textContent = 'กำลังขอตำแหน่ง GPS...';
       statusEl.className = 'gps-status';
+      helpEl.classList.add('hidden');
+      retryBtn.classList.add('hidden');
 
       if (!navigator.geolocation) {
         statusEl.textContent = 'อุปกรณ์นี้ไม่รองรับ GPS กรุณาปักหมุดเองบนแผนที่';
         statusEl.className = 'gps-status bad';
+        retryBtn.classList.remove('hidden');
         showManualMap();
         return;
       }
@@ -537,6 +564,7 @@
         if (watchId !== null) navigator.geolocation.clearWatch(watchId);
         if (stale()) return;
         setLocation(lat, lng, accuracy);
+        retryBtn.classList.remove('hidden');
         if (accuracy <= 100) {
           statusEl.textContent = 'ได้ตำแหน่งแล้ว · แม่นยำ ~' + Math.round(accuracy) + ' ม.';
           statusEl.className = 'gps-status ok';
@@ -546,13 +574,22 @@
           showManualMap();
         }
       }
-      function fallbackToManual() {
+      function fallbackToManual(errorCode) {
         if (settled) return;
         settled = true;
         if (watchId !== null) navigator.geolocation.clearWatch(watchId);
         if (stale()) return;
-        statusEl.textContent = 'หาตำแหน่งอัตโนมัติไม่เจอ กรุณาแตะแผนที่ตรงตำแหน่งที่คุณอยู่';
         statusEl.className = 'gps-status bad';
+        if (errorCode === 1) {
+          // ผู้ใช้/เบราว์เซอร์ไม่อนุญาตให้เว็บนี้ใช้ตำแหน่ง
+          statusEl.textContent = 'เบราว์เซอร์ไม่ได้อนุญาตให้เว็บนี้ใช้ตำแหน่ง';
+          helpEl.textContent = 'แตะไอคอนแม่กุญแจ/การตั้งค่าเว็บไซต์ข้างช่องที่อยู่เว็บ แล้วเปลี่ยน "ตำแหน่ง" เป็น "อนุญาต" จากนั้นกดปุ่มด้านล่าง หรือแตะแผนที่เพื่อปักหมุดเองก็ได้';
+        } else {
+          statusEl.textContent = 'หาตำแหน่งอัตโนมัติไม่เจอ';
+          helpEl.textContent = 'ตรวจว่าเปิด GPS (ตำแหน่ง) ในมือถือแล้ว จากนั้นกดปุ่มด้านล่าง หรือแตะแผนที่ตรงตำแหน่งที่คุณอยู่เพื่อปักหมุดเอง';
+        }
+        helpEl.classList.remove('hidden');
+        retryBtn.classList.remove('hidden');
         showManualMap();
       }
 
@@ -564,7 +601,7 @@
           statusEl.textContent = 'กำลังปรับตำแหน่งให้แม่นยำขึ้น... (~' + Math.round(acc) + ' ม.)';
         }
         if (acc <= 15) finish(pos.coords.latitude, pos.coords.longitude, acc);
-      }, function() { fallbackToManual(); }, { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 });
+      }, function(err) { fallbackToManual(err && err.code); }, { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 });
 
       setTimeout(function() {
         if (settled) return;
@@ -592,6 +629,7 @@
               setLocation(pos.lat, pos.lng);
             });
           }
+          document.getElementById('gpsHelp').classList.add('hidden');
           document.getElementById('gpsStatus').textContent = 'ใช้ตำแหน่งที่ปักหมุดเอง';
           document.getElementById('gpsStatus').className = 'gps-status ok';
         });
