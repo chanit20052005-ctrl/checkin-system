@@ -167,6 +167,7 @@
       </div>
       <h1>เช็คอินพนักงาน</h1>
       <p class="muted">เข้าสู่ระบบด้วยรหัสพนักงานของคุณ</p>
+      <p class="muted" style="font-size: 13px; margin-top: 6px;">หลังเข้าสู่ระบบ เว็บจะขอใช้ตำแหน่งของคุณ กรุณากด "อนุญาต"</p>
     </div>
     <div class="card">
       <label for="loginId" style="margin-top: 0;">รหัสพนักงาน</label>
@@ -449,14 +450,35 @@
       document.getElementById('loginScreen').classList.remove('hidden');
     }
 
+    // ===== ดึงเช็คอินของพนักงาน 1 คน เฉพาะช่วงเวลาที่ต้องการ (ประหยัดโควตาการอ่าน) =====
+    // ต้องมีดัชนี (composite index) checkins: employeeId ↑ + timestamp ↑ ใน Firebase Console
+    // ถ้ายังไม่มีดัชนี Firestore จะตอบ error "failed-precondition" → ใช้วิธีเดิม (ดึงทั้งหมดของคนนั้น) ชั่วคราว ระบบไม่พัง
+    var indexMissing = false;
+    async function getEmployeeCheckins(employeeId, start, end) {
+      if (!indexMissing) {
+        try {
+          return await db.collection('checkins')
+            .where('employeeId', '==', employeeId)
+            .where('timestamp', '>=', firebase.firestore.Timestamp.fromDate(start))
+            .where('timestamp', '<', firebase.firestore.Timestamp.fromDate(end))
+            .get();
+        } catch (err) {
+          if (!err || err.code !== 'failed-precondition') throw err;
+          indexMissing = true;
+          console.warn('ยังไม่มีดัชนีใน Firestore → ใช้วิธีเดิมชั่วคราว:', err.message);
+        }
+      }
+      return await db.collection('checkins').where('employeeId', '==', employeeId).get();
+    }
+
     // ===== โหลดรายการเช็คอินของวันนี้ มาวาดไทม์ไลน์ =====
     async function loadTodayStatus() {
       const idAtStart = loggedInId;
       try {
-        const snapshot = await db.collection('checkins').where('employeeId', '==', idAtStart).get();
-        if (loggedInId !== idAtStart) return; // ออกจากระบบ/เปลี่ยนคนไปแล้วระหว่างรอ
         const start = new Date(todayLocalStr() + 'T00:00:00');
         const end = new Date(start); end.setDate(end.getDate() + 1);
+        const snapshot = await getEmployeeCheckins(idAtStart, start, end);
+        if (loggedInId !== idAtStart) return; // ออกจากระบบ/เปลี่ยนคนไปแล้วระหว่างรอ
         const list = [];
         snapshot.forEach(function(doc) {
           const data = doc.data();
@@ -557,7 +579,7 @@
       const statusEl = document.getElementById('gpsStatus');
       const helpEl = document.getElementById('gpsHelp');
       const retryBtn = document.getElementById('retryGpsBtn');
-      statusEl.textContent = 'กำลังขอตำแหน่ง GPS...';
+      statusEl.textContent = 'กำลังขอตำแหน่ง GPS... ถ้ามีหน้าต่างถามขอใช้ตำแหน่ง ให้กด "อนุญาต"';
       statusEl.className = 'gps-status';
       helpEl.classList.add('hidden');
       retryBtn.classList.add('hidden');
@@ -704,10 +726,10 @@
       listEl.innerHTML = '<div class="empty-note">กำลังโหลด...</div>';
 
       try {
-        const snapshot = await db.collection('checkins').where('employeeId', '==', loggedInId).get();
         const selectedStart = new Date(fromStr + 'T00:00:00');
         const selectedEnd = new Date(toStr + 'T00:00:00');
         selectedEnd.setDate(selectedEnd.getDate() + 1); // รวมทั้งวันสุดท้ายด้วย
+        const snapshot = await getEmployeeCheckins(loggedInId, selectedStart, selectedEnd);
 
         const records = [];
         snapshot.forEach(function(doc) {
