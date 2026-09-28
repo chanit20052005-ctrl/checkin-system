@@ -1,141 +1,267 @@
 <!DOCTYPE html>
-<html>
+<html lang="th">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
   <title>ระบบเช็คอินพนักงาน</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600&family=IBM+Plex+Sans+Thai:wght@400;500;600;700&display=swap">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <!-- Firebase SDK (compat version - ใช้ง่ายไม่ต้องมี build tool) -->
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
   <style>
+    /* ===== โทนสีและฟอนต์ (แบบ C: ไทม์ไลน์หลายจุด) ===== */
+    :root {
+      --bg: #F4F2EE;
+      --card: #FFFFFF;
+      --ink: #1B1F23;
+      --muted: #5B6167;
+      --line: #E4E1DB;
+      --accent: #0F6B5C;
+      --accent-dark: #0A4E43;
+      --accent-soft: #EEF4F2;
+      --warn: #8A4B12;
+      --warn-soft: #FBF0E4;
+      --err: #B3261E;
+      --err-soft: #FBEAE8;
+      --disabled: #A9BDB8;
+      --font: 'IBM Plex Sans Thai', 'Sarabun', 'Segoe UI', sans-serif;
+      --num: 'Chakra Petch', 'IBM Plex Sans Thai', 'Segoe UI', sans-serif;
+    }
     * { box-sizing: border-box; }
     body {
-      font-family: 'Sarabun', 'Segoe UI', sans-serif;
-      background: #f2f4f7;
+      font-family: var(--font);
+      background: var(--bg);
       margin: 0;
-      padding: 16px;
-      color: #1a1a1a;
+      padding: 24px 18px 28px;
+      color: var(--ink);
+      -webkit-text-size-adjust: 100%;
     }
-    .card {
-      max-width: 420px;
-      margin: 0 auto;
-      background: #fff;
-      border-radius: 16px;
-      padding: 24px;
-      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
-    }
-    h1 { font-size: 20px; text-align: center; margin: 0 0 20px; color: #2c3e50; }
-    label { display: block; font-size: 14px; font-weight: 600; margin: 16px 0 6px; color: #444; }
-    input[type="text"], input[type="password"] {
-      width: 100%; padding: 12px; border: 1px solid #dcdfe4; border-radius: 10px;
-      font-size: 16px; background: #fafbfc;
-    }
-    .identity-box { margin-top: 8px; background: #eef2f7; border-radius: 10px; padding: 14px; font-size: 15px; }
-    .identity-box .name { font-weight: 700; color: #2c3e50; font-size: 17px; }
-    .identity-box .id { font-size: 13px; color: #777; margin-top: 2px; }
-    .identity-box .today { font-size: 13px; color: #777; margin-top: 8px; padding-top: 8px; border-top: 1px solid #dde3ea; }
-    .identity-box .today.done { color: #1e7e42; font-weight: 600; }
-    .logout-link {
-      display: block; text-align: right; font-size: 12px; color: #888;
-      margin-top: 6px; cursor: pointer; text-decoration: underline;
-    }
-    #mapBox { display: none; margin-top: 8px; }
-    #map { height: 260px; border-radius: 12px; border: 1px solid #dcdfe4; }
-    .map-hint { font-size: 12px; color: #888; margin-top: 6px; text-align: center; }
-    .gps-status {
-      margin-top: 12px; padding: 10px 12px; border-radius: 10px; font-size: 13px;
-      background: #eef2f7; color: #555; text-align: center;
-    }
-    .gps-status.ok { background: #e6f7ee; color: #1e7e42; }
-    .gps-status.bad { background: #fdecea; color: #c0392b; }
-    #mapLinkBox { margin-top: 8px; text-align: center; display: none; }
-    #mapLink { display: inline-block; font-size: 13px; color: #2c6ef2; text-decoration: underline; }
-    button.primary {
-      width: 100%; margin-top: 20px; padding: 14px; background: #2c6ef2; color: #fff;
-      border: none; border-radius: 12px; font-size: 16px; font-weight: 600; cursor: pointer;
-    }
-    button.primary:disabled { background: #a9bdda; cursor: not-allowed; }
-    button.secondary {
-      width: 100%; margin-top: 10px; padding: 12px; background: #eef2f7; color: #2c6ef2;
-      border: 1px solid #c9d6ea; border-radius: 12px; font-size: 15px; font-weight: 600; cursor: pointer;
-    }
-    .result { margin-top: 16px; padding: 14px; border-radius: 12px; font-size: 14px; text-align: center; display: none; }
-    .result.success { background: #e6f7ee; color: #1e7e42; display: block; }
-    .result.error { background: #fdecea; color: #c0392b; display: block; }
+    .screen { max-width: 440px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
     .hidden { display: none !important; }
-    .history-nav {
-      display: flex; justify-content: space-between; align-items: center;
-      margin-top: 6px; font-size: 12px;
+    .num { font-family: var(--num); font-variant-numeric: tabular-nums; }
+    .muted { color: var(--muted); }
+    .card { background: var(--card); border-radius: 18px; padding: 18px 16px; }
+
+    /* ปุ่ม */
+    button { font-family: var(--font); }
+    .btn-primary {
+      width: 100%; min-height: 58px; border: none; border-radius: 16px;
+      background: var(--accent); color: #fff; font-size: 19px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center; gap: 10px; cursor: pointer;
     }
-    .history-nav a { color: #2c6ef2; text-decoration: underline; cursor: pointer; }
-    .history-nav .logout-link { margin: 0; }
-    input[type="date"] {
-      width: 100%; padding: 11px; border: 1px solid #dcdfe4; border-radius: 10px;
-      font-size: 15px; background: #fafbfc; margin-top: 6px;
+    .btn-primary:disabled { background: var(--disabled); cursor: not-allowed; }
+    .btn-primary svg { flex-shrink: 0; }
+    .btn-link {
+      border: none; background: transparent; padding: 10px 2px; font-size: 14px;
+      color: var(--accent); font-weight: 600; cursor: pointer; text-decoration: none;
     }
-    .history-item {
-      display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid #eee;
+    .btn-quiet {
+      border: none; background: transparent; padding: 10px 2px; font-size: 14px;
+      color: var(--muted); cursor: pointer; text-decoration: underline;
     }
-    .history-info { font-size: 13px; color: #444; }
-    .history-info .time { font-weight: 700; color: #2c3e50; margin-bottom: 4px; }
-    .history-info a { color: #2c6ef2; text-decoration: underline; font-size: 12px; }
-    .empty-note { font-size: 13px; color: #888; padding: 14px 0; text-align: center; }
+    a { color: var(--accent); }
+
+    /* ช่องกรอก */
+    label { display: block; font-size: 14px; font-weight: 600; margin: 14px 0 6px; }
+    input[type="text"], input[type="password"], input[type="date"] {
+      width: 100%; padding: 13px 14px; border: 1px solid var(--line); border-radius: 12px;
+      font-size: 16px; font-family: var(--font); background: #FAFAF8; color: var(--ink);
+    }
+    input:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: transparent; }
+
+    /* ข้อความผลลัพธ์ */
+    .result { padding: 12px 14px; border-radius: 12px; font-size: 14px; text-align: center; display: none; }
+    .result.info { background: var(--accent-soft); color: var(--accent-dark); display: block; }
+    .result.success { background: var(--accent-soft); color: var(--accent-dark); font-weight: 600; display: block; }
+    .result.error { background: var(--err-soft); color: var(--err); display: block; }
+
+    /* ===== หน้าล็อกอิน ===== */
+    .brand { display: flex; flex-direction: column; gap: 4px; margin: 20px 0 6px; }
+    .brand-mark {
+      width: 48px; height: 48px; border-radius: 14px; background: var(--accent);
+      display: flex; align-items: center; justify-content: center; margin-bottom: 10px;
+    }
+    .brand h1 { margin: 0; font-size: 26px; font-weight: 700; }
+    .brand p { margin: 0; font-size: 14px; }
+    #loginScreen .btn-primary { margin-top: 20px; }
+    #loginResult { margin-top: 12px; }
+
+    /* ===== หน้าเช็คอิน ===== */
+    .head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+    .head .date { font-size: 13px; }
+    .head .hello { font-size: 22px; font-weight: 700; line-height: 1.3; word-break: break-word; }
+    .head .empid { font-size: 13px; }
+    .head .clock { font-size: 34px; font-weight: 600; line-height: 1.1; }
+    .stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .stat { background: var(--card); border-radius: 14px; padding: 12px 14px; }
+    .stat .label { font-size: 12px; }
+    .stat .value { font-size: 26px; font-weight: 600; }
+
+    .timeline-title { font-size: 15px; font-weight: 600; margin: 0 0 14px; }
+    .tl-row { display: flex; gap: 14px; }
+    .tl-rail { display: flex; flex-direction: column; align-items: center; width: 26px; flex-shrink: 0; }
+    .tl-dot {
+      width: 26px; height: 26px; border-radius: 13px; background: var(--accent); color: #fff;
+      font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center;
+    }
+    .tl-dot.pending { background: #fff; border: 2px dashed var(--accent); }
+    .tl-line { width: 2px; flex-grow: 1; min-height: 20px; background: var(--accent); }
+    .tl-line.dashed { background: repeating-linear-gradient(var(--muted) 0 4px, transparent 4px 8px); opacity: 0.6; }
+    .tl-body { flex-grow: 1; min-width: 0; padding-bottom: 16px; display: flex; flex-direction: column; gap: 2px; }
+    .tl-row:last-child .tl-body { padding-bottom: 0; }
+    .tl-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+    .tl-time { font-size: 18px; font-weight: 600; }
+    .tl-meta { font-size: 13px; overflow-wrap: anywhere; }
+    .tl-link { font-size: 13px; font-weight: 600; text-decoration: none; }
+    .tl-current-title { font-size: 15px; font-weight: 600; }
+    .tl-empty { font-size: 13px; padding: 2px 0 14px; }
+
+    .gps-status {
+      margin-top: 8px; padding: 9px 12px; border-radius: 10px; font-size: 13px;
+      background: #F1F0EC; color: var(--muted); display: flex; align-items: flex-start; gap: 8px;
+    }
+    .gps-status::before {
+      content: ''; width: 8px; height: 8px; border-radius: 4px; background: currentColor;
+      flex-shrink: 0; margin-top: 6px; opacity: 0.8;
+    }
+    .gps-status.ok { background: var(--accent-soft); color: var(--accent-dark); }
+    .gps-status.bad { background: var(--warn-soft); color: var(--warn); }
+    #mapBox { display: none; margin-top: 10px; }
+    #map { height: 240px; border-radius: 12px; border: 1px solid var(--line); z-index: 0; }
+    .map-hint { font-size: 12px; margin-top: 6px; }
+    #mapLinkBox { display: none; margin-top: 6px; }
+    #mapLinkBox a { font-size: 13px; font-weight: 600; text-decoration: none; }
+
+    .foot { display: flex; justify-content: space-between; align-items: center; }
+
+    /* ===== หน้าประวัติ ===== */
+    .back { align-self: flex-start; display: flex; align-items: center; gap: 4px; padding-left: 0; }
+    .page-title { margin: 0; font-size: 22px; font-weight: 700; }
+    .date-range { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .date-range label { margin-top: 0; font-size: 13px; }
+    .history-day { font-size: 13px; font-weight: 600; margin: 4px 2px 8px; color: var(--muted); }
+    .history-item { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+    .history-item:last-child { border-bottom: none; }
+    .history-item .t { font-size: 18px; font-weight: 600; }
+    .history-item .m { font-size: 13px; overflow-wrap: anywhere; }
+    .empty-note { font-size: 14px; color: var(--muted); padding: 16px 0; text-align: center; }
   </style>
 </head>
 <body>
 
   <!-- ===== หน้าล็อกอิน ===== -->
-  <div class="card" id="loginScreen">
-    <h1>🔐 เข้าสู่ระบบ</h1>
-    <label>รหัสพนักงาน</label>
-    <input type="text" id="loginId" placeholder="กรอกรหัสพนักงาน">
-    <label>รหัสผ่าน</label>
-    <input type="password" id="loginPassword" placeholder="กรอกรหัสผ่าน">
-    <button class="primary" id="loginBtn" onclick="doLogin()">เข้าสู่ระบบ</button>
-    <div class="result" id="loginResult"></div>
+  <div class="screen" id="loginScreen">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s7-6.2 7-12a7 7 0 1 0-14 0c0 5.8 7 12 7 12z"></path><circle cx="12" cy="10" r="2.5"></circle></svg>
+      </div>
+      <h1>เช็คอินพนักงาน</h1>
+      <p class="muted">เข้าสู่ระบบด้วยรหัสพนักงานของคุณ</p>
+    </div>
+    <div class="card">
+      <label for="loginId" style="margin-top: 0;">รหัสพนักงาน</label>
+      <input type="text" id="loginId" placeholder="กรอกรหัสพนักงาน" autocomplete="username">
+      <label for="loginPassword">รหัสผ่าน</label>
+      <input type="password" id="loginPassword" placeholder="กรอกรหัสผ่าน" autocomplete="current-password">
+      <button class="btn-primary" id="loginBtn" onclick="doLogin()">เข้าสู่ระบบ</button>
+      <div class="result" id="loginResult"></div>
+    </div>
   </div>
 
   <!-- ===== หน้าเช็คอิน ===== -->
-  <div class="card hidden" id="checkinScreen">
-    <h1>📍 เช็คอินพนักงาน</h1>
-    <div class="identity-box">
-      <div class="name" id="displayName"></div>
-      <div class="id" id="displayId"></div>
-      <div class="today" id="todayStatus">กำลังตรวจสอบการเช็คอินวันนี้...</div>
-    </div>
-    <div class="history-nav">
-      <a onclick="showHistory()">📖 ดูประวัติเช็คอิน</a>
-      <div class="logout-link" onclick="logout()">ออกจากระบบ</div>
+  <div class="screen hidden" id="checkinScreen">
+    <div class="head">
+      <div>
+        <div class="date muted" id="todayDate"></div>
+        <div class="hello" id="displayName"></div>
+        <div class="empid muted" id="displayId"></div>
+      </div>
+      <div class="clock num" id="clock">--:--</div>
     </div>
 
-    <div class="gps-status" id="gpsStatus">📡 กำลังขอตำแหน่ง GPS...</div>
-    <div id="mapBox">
-      <label>ปักหมุดตำแหน่งที่คุณอยู่ (สำรองเมื่อ GPS ใช้ไม่ได้)</label>
-      <div id="map"></div>
-      <div class="map-hint">แตะบนแผนที่ตรงตำแหน่งจริงของคุณ (ลากหมุดปรับได้)</div>
-    </div>
-    <div id="mapLinkBox">
-      <a id="mapLink" href="#" target="_blank">🗺️ เปิดดูตำแหน่งนี้บน Google Maps</a>
+    <div class="stats">
+      <div class="stat">
+        <div class="label muted">เช็คอินวันนี้</div>
+        <div class="value num" id="statCount">–</div>
+      </div>
+      <div class="stat">
+        <div class="label muted">จุดแรกเมื่อ</div>
+        <div class="value num" id="statFirst">–</div>
+      </div>
     </div>
 
-    <button class="primary" id="submitBtn" disabled onclick="submitCheckin()">ส่งเช็คอิน</button>
+    <div class="card">
+      <div class="timeline-title">เส้นทางวันนี้</div>
+      <!-- รายการจุดที่เช็คอินแล้ววันนี้ (สร้างด้วย JS) -->
+      <div id="timelineDone"><div class="tl-empty muted">กำลังโหลดข้อมูลวันนี้...</div></div>
+
+      <!-- จุดปัจจุบัน (ยังไม่ได้เช็คอิน) -->
+      <div class="tl-row" id="currentPoint">
+        <div class="tl-rail"><div class="tl-dot pending" aria-hidden="true"></div></div>
+        <div class="tl-body">
+          <div class="tl-current-title" id="currentTitle">จุดที่ 1 (จุดปัจจุบัน)</div>
+          <div class="gps-status" id="gpsStatus">กำลังขอตำแหน่ง GPS...</div>
+          <div id="mapBox">
+            <div id="map"></div>
+            <div class="map-hint muted">แตะบนแผนที่ตรงตำแหน่งจริงของคุณ (ลากหมุดปรับได้)</div>
+          </div>
+          <div id="mapLinkBox">
+            <a id="mapLink" href="#" target="_blank" rel="noopener">ดูตำแหน่งนี้บน Google Maps</a>
+          </div>
+        </div>
+      </div>
+
+      <!-- หลังเช็คอินแล้ว: บอกว่าจะเช็คอินจุดถัดไปได้ยังไง -->
+      <div class="tl-row hidden" id="nextHint">
+        <div class="tl-rail"><div class="tl-dot pending" aria-hidden="true"></div></div>
+        <div class="tl-body">
+          <div class="tl-current-title" id="nextHintTitle">จุดถัดไป</div>
+          <div class="tl-meta muted">ถึงที่ใหม่แล้ว กดปุ่ม "เช็คอินจุดถัดไป" ด้านล่าง ระบบจะขอตำแหน่งใหม่ให้</div>
+        </div>
+      </div>
+    </div>
+
     <div class="result" id="result"></div>
-    <button class="secondary hidden" id="nextCheckinBtn" onclick="startNextCheckin()">📍 เช็คอินจุดถัดไป (ขอตำแหน่งใหม่)</button>
+
+    <button class="btn-primary" id="submitBtn" disabled onclick="submitCheckin()">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>
+      <span id="submitLabel">เช็คอินจุดที่ 1</span>
+    </button>
+    <button class="btn-primary hidden" id="nextCheckinBtn" onclick="startNextCheckin()">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s7-6.2 7-12a7 7 0 1 0-14 0c0 5.8 7 12 7 12z"></path><circle cx="12" cy="10" r="2.5"></circle></svg>
+      <span>เช็คอินจุดถัดไป</span>
+    </button>
+
+    <div class="foot">
+      <button class="btn-link" onclick="showHistory()">ดูประวัติย้อนหลัง</button>
+      <button class="btn-quiet" onclick="logout()">ออกจากระบบ</button>
+    </div>
   </div>
 
   <!-- ===== หน้าประวัติเช็คอิน ===== -->
-  <div class="card hidden" id="historyScreen">
-    <h1>📖 ประวัติเช็คอิน</h1>
-    <div class="history-nav">
-      <a onclick="backToCheckin()">← กลับหน้าเช็คอิน</a>
+  <div class="screen hidden" id="historyScreen">
+    <button class="btn-link back" onclick="backToCheckin()">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg>
+      กลับหน้าเช็คอิน
+    </button>
+    <h1 class="page-title">ประวัติเช็คอิน</h1>
+    <div class="card">
+      <div class="date-range">
+        <div>
+          <label for="historyDateFrom">จากวันที่</label>
+          <input type="date" id="historyDateFrom" onchange="loadHistory()">
+        </div>
+        <div>
+          <label for="historyDateTo">ถึงวันที่</label>
+          <input type="date" id="historyDateTo" onchange="loadHistory()">
+        </div>
+      </div>
     </div>
-    <label>จากวันที่</label>
-    <input type="date" id="historyDateFrom" onchange="loadHistory()">
-    <label>ถึงวันที่</label>
-    <input type="date" id="historyDateTo" onchange="loadHistory()">
-    <div id="historyList" style="margin-top: 14px;"><div class="empty-note">เลือกช่วงวันที่เพื่อดูประวัติ</div></div>
+    <div class="card" id="historyList"><div class="empty-note">เลือกช่วงวันที่เพื่อดูประวัติ</div></div>
   </div>
 
   <script>
@@ -151,12 +277,13 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
-
     // ===== วันที่วันนี้ตามเวลาเครื่อง (แก้ปัญหาวันที่เพี้ยนก่อน 07:00 น. จากการใช้เวลา UTC) =====
     function todayLocalStr() {
       const d = new Date();
       return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
     }
+    function pad2(n) { return String(n).padStart(2, '0'); }
+    function hhmm(d) { return pad2(d.getHours()) + ':' + pad2(d.getMinutes()); }
 
     // ===== กันโค้ดแปลกปลอม (XSS): แปลงข้อความให้แสดงเป็นตัวอักษรธรรมดา =====
     function escapeHtml(value) {
@@ -168,12 +295,22 @@
     function safeUrl(url) {
       return (typeof url === 'string' && /^https:\/\//i.test(url)) ? url : '#';
     }
+    // ข้อความพิกัด + ความแม่นยำ ของรายการเช็คอิน
+    function coordText(r) {
+      const coords = (typeof r.lat === 'number' && typeof r.lng === 'number') ? (r.lat.toFixed(6) + ', ' + r.lng.toFixed(6)) : 'ไม่มีพิกัด';
+      const acc = (typeof r.accuracy === 'number') ? ('GPS ~' + r.accuracy + ' ม.') : 'ปักหมุดเอง';
+      return coords + ' · ' + acc;
+    }
 
     var currentLat = null, currentLng = null, currentAccuracy = null;
     var leafletMap = null, marker = null;
     var loggedInName = null, loggedInId = null, loggedInDisplayName = null;
-    var todayCheckinCount = 0, todayLastCheckin = null; // สรุปการเช็คอินของวันนี้ (แสดงใต้ชื่อ)
-    var checkedInThisSession = false; // เช็คอินสำเร็จแล้วในรอบล็อกอินนี้ (กันกดส่งซ้ำโดยไม่ตั้งใจ)
+    var todayCheckins = [];          // รายการเช็คอินของวันนี้ (เรียงเก่า→ใหม่) ใช้วาดไทม์ไลน์
+    var localNewCheckins = [];       // เช็คอินที่เพิ่งส่งในรอบนี้ (กันหายถ้าข้อมูลวันนี้โหลดเสร็จทีหลัง)
+    var todayLoaded = false;
+    var checkedInThisSession = false; // เช็คอินจุดปัจจุบันสำเร็จแล้ว (กันกดส่งซ้ำโดยไม่ตั้งใจ)
+    var gpsRun = 0;                   // เลขรอบการขอ GPS (กันผลของรอบเก่ามาทับรอบใหม่)
+    var clockTimer = null;
 
     // ===== เข้ารหัสรหัสผ่านด้วย SHA-256 (Web Crypto API) =====
     async function sha256Hex(text) {
@@ -186,6 +323,18 @@
     }
     function generateSalt() {
       return (crypto.randomUUID ? crypto.randomUUID() : (Math.random().toString(36) + Date.now().toString(36)));
+    }
+
+    // กด Enter ในช่องรหัสผ่านเพื่อเข้าสู่ระบบ
+    document.getElementById('loginPassword').addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') doLogin();
+    });
+
+    // ===== นาฬิกาและวันที่ด้านบน =====
+    function tickClock() {
+      const now = new Date();
+      document.getElementById('clock').textContent = hhmm(now);
+      document.getElementById('todayDate').textContent = now.toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' });
     }
 
     // ===== ล็อกอิน =====
@@ -202,7 +351,9 @@
         return;
       }
 
-      document.getElementById('loginBtn').disabled = true;
+      const loginBtn = document.getElementById('loginBtn');
+      if (loginBtn.disabled) return;
+      loginBtn.disabled = true;
       try {
         const doc = await db.collection('employees').doc(employeeId).get();
         if (!doc.exists) {
@@ -217,40 +368,61 @@
         loggedInName = emp.name;
         loggedInId = employeeId;
         loggedInDisplayName = emp.nickname ? (emp.name + ' (' + emp.nickname + ')') : emp.name;
-        document.getElementById('displayName').textContent = loggedInDisplayName;
-        document.getElementById('displayId').textContent = 'รหัสพนักงาน: ' + loggedInId;
+        document.getElementById('displayName').textContent = 'สวัสดี ' + (emp.nickname || emp.name);
+        document.getElementById('displayId').textContent = (emp.nickname ? emp.name + ' · ' : '') + 'รหัส ' + loggedInId;
+
+        resetCheckinScreen();
+        tickClock();
+        if (clockTimer) clearInterval(clockTimer);
+        clockTimer = setInterval(tickClock, 1000);
+
         document.getElementById('loginScreen').classList.add('hidden');
         document.getElementById('checkinScreen').classList.remove('hidden');
         requestLocation();
         loadTodayStatus(); // ไม่ต้องรอ ให้โหลดเบื้องหลังไปพร้อม GPS
       } catch (err) {
         resultEl.className = 'result error';
-        resultEl.textContent = '❌ ' + err.message;
+        resultEl.textContent = err.message;
         resultEl.style.display = 'block';
       } finally {
-        document.getElementById('loginBtn').disabled = false;
+        loginBtn.disabled = false;
       }
+    }
+
+    // ล้างหน้าเช็คอินให้กลับเป็นสภาพเริ่มต้น (ใช้ตอนล็อกอินและออกจากระบบ)
+    function resetCheckinScreen() {
+      gpsRun++; // ยกเลิกผล GPS ของรอบก่อน (ถ้ายังค้างอยู่)
+      currentLat = null; currentLng = null; currentAccuracy = null;
+      checkedInThisSession = false;
+      todayCheckins = []; localNewCheckins = []; todayLoaded = false;
+      document.getElementById('timelineDone').innerHTML = '<div class="tl-empty muted">กำลังโหลดข้อมูลวันนี้...</div>';
+      document.getElementById('statCount').textContent = '–';
+      document.getElementById('statFirst').textContent = '–';
+      document.getElementById('currentPoint').classList.remove('hidden');
+      document.getElementById('nextHint').classList.add('hidden');
+      document.getElementById('submitBtn').classList.remove('hidden');
+      document.getElementById('submitBtn').disabled = true;
+      document.getElementById('nextCheckinBtn').classList.add('hidden');
+      document.getElementById('result').style.display = 'none';
+      document.getElementById('mapLinkBox').style.display = 'none';
+      document.getElementById('mapBox').style.display = 'none';
+      if (marker && leafletMap) { leafletMap.removeLayer(marker); marker = null; }
+      renderTimeline();
     }
 
     function logout() {
       loggedInName = null; loggedInId = null; loggedInDisplayName = null;
-      currentLat = null; currentLng = null; currentAccuracy = null;
-      checkedInThisSession = false;
-      todayCheckinCount = 0; todayLastCheckin = null;
-      document.getElementById('todayStatus').className = 'today';
-      document.getElementById('todayStatus').textContent = 'กำลังตรวจสอบการเช็คอินวันนี้...';
-      document.getElementById('submitBtn').textContent = 'ส่งเช็คอิน';
-      document.getElementById('submitBtn').disabled = true;
-      document.getElementById('nextCheckinBtn').classList.add('hidden');
+      resetCheckinScreen();
+      if (clockTimer) { clearInterval(clockTimer); clockTimer = null; }
       document.getElementById('loginId').value = '';
       document.getElementById('loginPassword').value = '';
-      document.getElementById('result').style.display = 'none';
+      document.getElementById('loginResult').style.display = 'none';
       document.getElementById('checkinScreen').classList.add('hidden');
       document.getElementById('historyScreen').classList.add('hidden');
       document.getElementById('loginScreen').classList.remove('hidden');
     }
 
-    // ===== สถานะ "วันนี้เช็คอินแล้วหรือยัง" ใต้ชื่อพนักงาน =====
+    // ===== โหลดรายการเช็คอินของวันนี้ มาวาดไทม์ไลน์ =====
     async function loadTodayStatus() {
       const idAtStart = loggedInId;
       try {
@@ -258,40 +430,69 @@
         if (loggedInId !== idAtStart) return; // ออกจากระบบ/เปลี่ยนคนไปแล้วระหว่างรอ
         const start = new Date(todayLocalStr() + 'T00:00:00');
         const end = new Date(start); end.setDate(end.getDate() + 1);
-        let count = 0, last = null;
+        const list = [];
         snapshot.forEach(function(doc) {
           const data = doc.data();
           if (data.timestamp && data.timestamp.toDate) {
             const t = data.timestamp.toDate();
             if (t >= start && t < end) {
-              count++;
-              if (!last || t > last) last = t;
+              list.push({ time: t, lat: data.lat, lng: data.lng, accuracy: data.accuracy, mapLink: data.mapLink });
             }
           }
         });
-        // ถ้าระหว่างรอโหลด พนักงานกดเช็คอินไปแล้ว ให้นับรวมด้วย
-        if (checkedInThisSession && todayLastCheckin && (!last || todayLastCheckin > last)) {
-          count = Math.max(count, todayCheckinCount); last = todayLastCheckin;
-        }
-        todayCheckinCount = count; todayLastCheckin = last;
-        renderTodayStatus();
+        // ถ้าระหว่างรอโหลด พนักงานกดเช็คอินไปแล้ว ให้รวมรายการนั้นด้วย (ถ้ายังไม่อยู่ในผลที่โหลดมา)
+        localNewCheckins.forEach(function(localRec) {
+          const found = list.some(function(r) {
+            return r.lat === localRec.lat && r.lng === localRec.lng && Math.abs(r.time - localRec.time) < 5 * 60 * 1000;
+          });
+          if (!found) list.push(localRec);
+        });
+        list.sort(function(a, b) { return a.time - b.time; });
+        todayCheckins = list;
+        todayLoaded = true;
+        renderTimeline();
       } catch (err) {
         if (loggedInId !== idAtStart) return;
-        document.getElementById('todayStatus').className = 'today';
-        document.getElementById('todayStatus').textContent = 'ตรวจสอบการเช็คอินวันนี้ไม่สำเร็จ';
+        todayCheckins = localNewCheckins.slice();
+        todayLoaded = true;
+        renderTimeline('โหลดรายการวันนี้ไม่สำเร็จ (ยังเช็คอินได้ตามปกติ)');
       }
     }
 
-    function renderTodayStatus() {
-      const el = document.getElementById('todayStatus');
-      if (todayCheckinCount === 0 || !todayLastCheckin) {
-        el.className = 'today';
-        el.textContent = '⏳ วันนี้ยังไม่ได้เช็คอิน';
-        return;
+    // ===== วาดไทม์ไลน์ + ตัวเลขสรุป + ข้อความบนปุ่ม =====
+    function renderTimeline(errorText) {
+      const doneEl = document.getElementById('timelineDone');
+      const n = todayCheckins.length;
+      const nextNo = n + 1;
+
+      if (todayLoaded || n > 0) {
+        document.getElementById('statCount').textContent = n + ' จุด';
+        document.getElementById('statFirst').textContent = n > 0 ? hhmm(todayCheckins[0].time) : '–';
       }
-      const hhmm = String(todayLastCheckin.getHours()).padStart(2, '0') + ':' + String(todayLastCheckin.getMinutes()).padStart(2, '0');
-      el.className = 'today done';
-      el.textContent = '✅ วันนี้เช็คอินแล้วเมื่อ ' + hhmm + ' น.' + (todayCheckinCount > 1 ? ' (รวม ' + todayCheckinCount + ' ครั้ง)' : '');
+
+      doneEl.innerHTML = '';
+      if (!todayLoaded && n === 0) {
+        doneEl.innerHTML = '<div class="tl-empty muted">กำลังโหลดข้อมูลวันนี้...</div>';
+      } else if (errorText) {
+        doneEl.innerHTML = '<div class="tl-empty muted">' + escapeHtml(errorText) + '</div>';
+      }
+      todayCheckins.forEach(function(r, i) {
+        const row = document.createElement('div');
+        row.className = 'tl-row';
+        row.innerHTML =
+          '<div class="tl-rail"><div class="tl-dot">' + (i + 1) + '</div>' +
+          '<div class="tl-line' + (i === n - 1 ? ' dashed' : '') + '"></div></div>' +
+          '<div class="tl-body">' +
+            '<div class="tl-top"><span class="tl-time num">' + hhmm(r.time) + '</span>' +
+            '<a class="tl-link" href="' + escapeHtml(safeUrl(r.mapLink)) + '" target="_blank" rel="noopener">แผนที่</a></div>' +
+            '<div class="tl-meta muted">' + escapeHtml(coordText(r)) + '</div>' +
+          '</div>';
+        doneEl.appendChild(row);
+      });
+
+      document.getElementById('currentTitle').textContent = 'จุดที่ ' + nextNo + ' (จุดปัจจุบัน)';
+      document.getElementById('nextHintTitle').textContent = 'จุดที่ ' + nextNo + ' (จุดถัดไป)';
+      document.getElementById('submitLabel').textContent = 'เช็คอินจุดที่ ' + nextNo;
     }
 
     // ===== เช็คอินจุดถัดไป (เช่น ไปหลายสาขาในวันเดียว) โดยไม่ต้องล็อกอินใหม่ =====
@@ -299,25 +500,28 @@
     function startNextCheckin() {
       checkedInThisSession = false;
       currentLat = null; currentLng = null; currentAccuracy = null;
-      const submitBtn = document.getElementById('submitBtn');
-      submitBtn.textContent = 'ส่งเช็คอิน';
-      submitBtn.disabled = true;
-      document.getElementById('result').style.display = 'none';
+      document.getElementById('submitBtn').disabled = true;
+      document.getElementById('submitBtn').classList.remove('hidden');
       document.getElementById('nextCheckinBtn').classList.add('hidden');
+      document.getElementById('result').style.display = 'none';
+      document.getElementById('nextHint').classList.add('hidden');
+      document.getElementById('currentPoint').classList.remove('hidden');
       document.getElementById('mapLinkBox').style.display = 'none';
       document.getElementById('mapBox').style.display = 'none';
       if (marker && leafletMap) { leafletMap.removeLayer(marker); marker = null; } // เอาหมุดเก่าออก
+      renderTimeline();
       requestLocation();
     }
 
     // ===== ขอ GPS อัตโนมัติ (รอปรับความแม่นยำสูงสุด 8 วินาที) =====
     function requestLocation() {
+      const myRun = ++gpsRun;
       const statusEl = document.getElementById('gpsStatus');
-      statusEl.textContent = '📡 กำลังขอตำแหน่ง GPS...';
+      statusEl.textContent = 'กำลังขอตำแหน่ง GPS...';
       statusEl.className = 'gps-status';
 
       if (!navigator.geolocation) {
-        statusEl.textContent = '❌ อุปกรณ์นี้ไม่รองรับ GPS กรุณาปักหมุดเอง';
+        statusEl.textContent = 'อุปกรณ์นี้ไม่รองรับ GPS กรุณาปักหมุดเองบนแผนที่';
         statusEl.className = 'gps-status bad';
         showManualMap();
         return;
@@ -325,16 +529,19 @@
 
       let bestAccuracy = Infinity, bestLat = null, bestLng = null, watchId = null, settled = false;
 
+      function stale() { return myRun !== gpsRun; } // มีการขอ GPS รอบใหม่/ออกจากระบบไปแล้ว
+
       function finish(lat, lng, accuracy) {
         if (settled) return;
         settled = true;
         if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+        if (stale()) return;
         setLocation(lat, lng, accuracy);
         if (accuracy <= 100) {
-          statusEl.textContent = '✅ ยืนยันตำแหน่งด้วย GPS แล้ว (ความแม่นยำ ~' + Math.round(accuracy) + ' ม.)';
+          statusEl.textContent = 'ได้ตำแหน่งแล้ว · แม่นยำ ~' + Math.round(accuracy) + ' ม.';
           statusEl.className = 'gps-status ok';
         } else {
-          statusEl.textContent = '⚠️ GPS หาตำแหน่งได้ไม่แม่นยำ (~' + Math.round(accuracy) + ' ม.) แนะนำปักหมุดเองด้านล่างเพื่อความถูกต้อง';
+          statusEl.textContent = 'GPS ไม่ค่อยแม่นยำ (~' + Math.round(accuracy) + ' ม.) แนะนำให้แตะแผนที่ตรงตำแหน่งจริง';
           statusEl.className = 'gps-status bad';
           showManualMap();
         }
@@ -343,16 +550,18 @@
         if (settled) return;
         settled = true;
         if (watchId !== null) navigator.geolocation.clearWatch(watchId);
-        statusEl.textContent = '⚠️ หาตำแหน่งอัตโนมัติไม่เจอ กรุณาปักหมุดเองด้านล่าง';
+        if (stale()) return;
+        statusEl.textContent = 'หาตำแหน่งอัตโนมัติไม่เจอ กรุณาแตะแผนที่ตรงตำแหน่งที่คุณอยู่';
         statusEl.className = 'gps-status bad';
         showManualMap();
       }
 
       watchId = navigator.geolocation.watchPosition(function(pos) {
+        if (settled || stale()) return;
         const acc = pos.coords.accuracy;
         if (acc < bestAccuracy) {
           bestAccuracy = acc; bestLat = pos.coords.latitude; bestLng = pos.coords.longitude;
-          statusEl.textContent = '📡 กำลังปรับตำแหน่งให้แม่นยำขึ้น... (~' + Math.round(acc) + ' ม.)';
+          statusEl.textContent = 'กำลังปรับตำแหน่งให้แม่นยำขึ้น... (~' + Math.round(acc) + ' ม.)';
         }
         if (acc <= 15) finish(pos.coords.latitude, pos.coords.longitude, acc);
       }, function() { fallbackToManual(); }, { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 });
@@ -372,16 +581,18 @@
           attribution: '&copy; OpenStreetMap contributors', maxZoom: 19
         }).addTo(leafletMap);
         leafletMap.on('click', function(e) {
+          if (checkedInThisSession) return; // เช็คอินจุดนี้ไปแล้ว ไม่รับหมุดใหม่
           setLocation(e.latlng.lat, e.latlng.lng);
           if (marker) marker.setLatLng(e.latlng);
           else {
             marker = L.marker(e.latlng, { draggable: true }).addTo(leafletMap);
             marker.on('dragend', function() {
+              if (checkedInThisSession) return;
               const pos = marker.getLatLng();
               setLocation(pos.lat, pos.lng);
             });
           }
-          document.getElementById('gpsStatus').textContent = '📍 ใช้ตำแหน่งที่ปักหมุดเอง';
+          document.getElementById('gpsStatus').textContent = 'ใช้ตำแหน่งที่ปักหมุดเอง';
           document.getElementById('gpsStatus').className = 'gps-status ok';
         });
       } else {
@@ -424,6 +635,7 @@
     function backToCheckin() {
       document.getElementById('historyScreen').classList.add('hidden');
       document.getElementById('checkinScreen').classList.remove('hidden');
+      if (leafletMap) setTimeout(function() { leafletMap.invalidateSize(); }, 100);
     }
 
     async function loadHistory() {
@@ -460,15 +672,26 @@
           return;
         }
 
+        // จัดกลุ่มตามวัน
         listEl.innerHTML = '';
+        let lastDay = '';
         records.forEach(function(r) {
+          const dayLabel = r.time.toLocaleDateString('th-TH', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+          if (dayLabel !== lastDay) {
+            const h = document.createElement('div');
+            h.className = 'history-day';
+            h.textContent = dayLabel;
+            listEl.appendChild(h);
+            lastDay = dayLabel;
+          }
           const div = document.createElement('div');
           div.className = 'history-item';
           div.innerHTML =
-            '<div class="history-info">' +
-            '<div class="time">🕒 ' + r.time.toLocaleDateString('th-TH') + ' ' + r.time.toLocaleTimeString('th-TH') + '</div>' +
-            '<a href="' + escapeHtml(safeUrl(r.mapLink)) + '" target="_blank" rel="noopener">🗺️ เปิดแผนที่</a>' +
-            '</div>';
+            '<div style="min-width:0">' +
+              '<div class="t num">' + pad2(r.time.getHours()) + ':' + pad2(r.time.getMinutes()) + ':' + pad2(r.time.getSeconds()) + '</div>' +
+              '<div class="m muted">' + escapeHtml(coordText(r)) + '</div>' +
+            '</div>' +
+            '<a class="tl-link" href="' + escapeHtml(safeUrl(r.mapLink)) + '" target="_blank" rel="noopener">แผนที่</a>';
           listEl.appendChild(div);
         });
       } catch (err) {
@@ -479,37 +702,42 @@
     async function submitCheckin() {
       const submitBtn = document.getElementById('submitBtn');
       const resultEl = document.getElementById('result');
+      if (submitBtn.disabled || checkedInThisSession || currentLat === null) return;
       submitBtn.disabled = true;
-      resultEl.style.display = 'none';
-      resultEl.className = 'result';
+      resultEl.className = 'result info';
       resultEl.textContent = 'กำลังส่งข้อมูล...';
       resultEl.style.display = 'block';
 
+      const lat = currentLat, lng = currentLng, accuracy = currentAccuracy;
       try {
         // บันทึกข้อมูลเช็คอินลง Firestore (ไม่มีรูปภาพแล้ว)
-        const mapUrl = 'https://www.google.com/maps?q=' + currentLat + ',' + currentLng;
+        const mapUrl = 'https://www.google.com/maps?q=' + lat + ',' + lng;
         await db.collection('checkins').add({
           employeeId: loggedInId,
           employeeName: loggedInName,
           timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-          lat: currentLat,
-          lng: currentLng,
-          accuracy: currentAccuracy,
+          lat: lat,
+          lng: lng,
+          accuracy: accuracy,
           mapLink: mapUrl
         });
 
-        resultEl.className = 'result success';
-        resultEl.textContent = '✅ เช็คอินสำเร็จ!';
         checkedInThisSession = true;
-        todayCheckinCount += 1;
-        todayLastCheckin = new Date();
-        renderTodayStatus();
-        submitBtn.textContent = 'เช็คอินแล้ว ✓';
-        submitBtn.disabled = true;
+        const rec = { time: new Date(), lat: lat, lng: lng, accuracy: accuracy, mapLink: mapUrl };
+        localNewCheckins.push(rec);
+        todayCheckins.push(rec);
+        renderTimeline();
+
+        resultEl.className = 'result success';
+        resultEl.textContent = 'เช็คอินจุดที่ ' + todayCheckins.length + ' สำเร็จ เวลา ' + hhmm(rec.time) + ' น.';
+        document.getElementById('currentPoint').classList.add('hidden');
+        document.getElementById('nextHint').classList.remove('hidden');
+        document.getElementById('mapBox').style.display = 'none';
+        submitBtn.classList.add('hidden');
         document.getElementById('nextCheckinBtn').classList.remove('hidden');
       } catch (err) {
         resultEl.className = 'result error';
-        resultEl.textContent = '❌ ' + err.message;
+        resultEl.textContent = 'เช็คอินไม่สำเร็จ: ' + err.message;
         submitBtn.disabled = false;
       }
     }
