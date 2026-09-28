@@ -418,6 +418,14 @@
         return;
       }
 
+      // Firestore ใช้ "/" คั่น path และไม่รับรหัสที่เป็น "." ".." หรือ __xxx__ → กันไว้ก่อนบันทึก
+      if (employeeId.includes('/') || employeeId === '.' || employeeId === '..' || /^__.*__$/.test(employeeId)) {
+        msg.className = 'msg err';
+        msg.textContent = 'รหัสพนักงานห้ามมีเครื่องหมาย / (ใช้ตัวเลข ตัวอักษร หรือ - แทนได้)';
+        msg.style.display = 'block';
+        return;
+      }
+
       try {
         const existing = await db.collection('employees').doc(employeeId).get();
         if (existing.exists) {
