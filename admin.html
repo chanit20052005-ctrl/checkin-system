@@ -32,6 +32,7 @@
       border: none; border-radius: 12px; font-size: 15px; font-weight: 600; cursor: pointer;
     }
     button.primary:disabled { background: #a9bdda; cursor: not-allowed; }
+    button.primary.export-btn { background: #1e7e42; }
     .msg { margin-top: 12px; padding: 10px 12px; border-radius: 10px; font-size: 13px; display: none; }
     .msg.ok { background: #e6f7ee; color: #1e7e42; display: block; }
     .msg.err { background: #fdecea; color: #c0392b; display: block; }
@@ -50,7 +51,7 @@
       background: #eef2f7; color: #2c6ef2; border: none; border-radius: 8px;
       padding: 6px 10px; font-size: 12px; cursor: pointer; margin-right: 6px;
     }
-    .hidden { display: none; }
+    .hidden { display: none !important; }
     .empty-note { font-size: 13px; color: #888; padding: 10px 0; }
     .logout-link {
       display: block; text-align: right; font-size: 12px; color: #888;
@@ -132,6 +133,7 @@
       <input type="date" id="adminCheckinDateTo" onchange="loadCheckins()">
       <label>ตรวจสอบรายบุคคล (ไม่บังคับ)</label>
       <input type="text" id="adminCheckinEmpFilter" placeholder="กรอกรหัสพนักงาน เช่น 213456" oninput="loadCheckins()">
+      <button class="primary export-btn hidden" id="exportCsvBtn" onclick="exportCheckinsCsv()">📥 ดาวน์โหลดเป็นไฟล์ Excel (CSV)</button>
       <div id="checkinList" style="margin-top: 14px;"><div class="empty-note">เลือกช่วงวันที่เพื่อดูรายการ</div></div>
     </div>
   </div>
@@ -252,6 +254,8 @@
 
     // ===== โหลดรายการเช็คอินของวันที่เลือก (ทุกพนักงาน หรือกรองรายบุคคล) =====
     let checkinLoadTimer = null;
+    let lastLoadedCheckins = [];  // รายการเช็คอินที่แสดงอยู่ล่าสุด (ใช้ตอนดาวน์โหลดไฟล์)
+    let lastLoadedRange = { from: '', to: '', emp: '' };
     function loadCheckins() {
       // หน่วงเวลาเล็กน้อยตอนพิมพ์รหัสพนักงาน กันยิง query รัวทุกตัวอักษร
       clearTimeout(checkinLoadTimer);
@@ -269,6 +273,8 @@
       if (toStr < fromStr) { const tmp = fromStr; fromStr = toStr; toStr = tmp; }
 
       listEl.innerHTML = '<div class="empty-note">กำลังโหลด...</div>';
+      lastLoadedCheckins = [];
+      document.getElementById('exportCsvBtn').classList.add('hidden');
 
       try {
         // ถ้ากรอกรหัสพนักงาน ให้ค้นเฉพาะคนนั้น (ประหยัดโควตาการอ่านกว่าดึงทั้งหมด)
@@ -286,7 +292,7 @@
           if (data.timestamp && data.timestamp.toDate) {
             const t = data.timestamp.toDate();
             if (t >= selectedStart && t < selectedEnd) {
-              records.push({ id: doc.id, time: t, employeeName: data.employeeName, employeeId: data.employeeId, mapLink: data.mapLink, lat: data.lat, lng: data.lng });
+              records.push({ id: doc.id, time: t, employeeName: data.employeeName, employeeId: data.employeeId, mapLink: data.mapLink, lat: data.lat, lng: data.lng, accuracy: data.accuracy });
             }
           }
         });
@@ -296,6 +302,10 @@
           listEl.innerHTML = '<div class="empty-note">' + (empFilter ? 'ไม่มีรายการเช็คอินของรหัสพนักงานนี้ในช่วงวันที่เลือก' : 'ไม่มีรายการเช็คอินในช่วงวันที่เลือก') + '</div>';
           return;
         }
+
+        lastLoadedCheckins = records;
+        lastLoadedRange = { from: fromStr, to: toStr, emp: empFilter };
+        document.getElementById('exportCsvBtn').classList.remove('hidden');
 
         listEl.innerHTML = '';
         records.forEach(function(r) {
@@ -326,6 +336,45 @@
       } catch (err) {
         listEl.innerHTML = '<div class="empty-note">โหลดไม่สำเร็จ: ' + escapeHtml(err.message) + '</div>';
       }
+    }
+
+    // ===== ดาวน์โหลดรายการเช็คอินที่แสดงอยู่เป็นไฟล์ CSV (เปิดด้วย Excel ได้, ไม่อ่าน Firestore เพิ่ม) =====
+    function exportCheckinsCsv() {
+      if (lastLoadedCheckins.length === 0) return;
+      const pad = function(n) { return String(n).padStart(2, '0'); };
+      // ครอบทุกช่องด้วย "..." และกันสูตร Excel แปลกปลอม (ค่าที่ขึ้นต้นด้วย = + - @)
+      const cell = function(value) {
+        let v = String(value == null ? '' : value);
+        if (/^[=+\-@\t\r]/.test(v)) v = "'" + v;
+        return '"' + v.replace(/"/g, '""') + '"';
+      };
+      const rows = [['วันที่', 'เวลา', 'รหัสพนักงาน', 'ชื่อ', 'ละติจูด', 'ลองจิจูด', 'ความแม่นยำ (เมตร)', 'ลิงก์แผนที่']];
+      // เรียงจากเก่าไปใหม่ อ่านง่ายกว่าใน Excel
+      lastLoadedCheckins.slice().sort(function(a, b) { return a.time - b.time; }).forEach(function(r) {
+        const t = r.time;
+        rows.push([
+          t.getFullYear() + '-' + pad(t.getMonth() + 1) + '-' + pad(t.getDate()),
+          pad(t.getHours()) + ':' + pad(t.getMinutes()) + ':' + pad(t.getSeconds()),
+          r.employeeId,
+          r.employeeName,
+          typeof r.lat === 'number' ? r.lat.toFixed(6) : '',
+          typeof r.lng === 'number' ? r.lng.toFixed(6) : '',
+          typeof r.accuracy === 'number' ? r.accuracy : '-',
+          safeUrl(r.mapLink) === '#' ? '' : r.mapLink
+        ]);
+      });
+      // \uFEFF = BOM ทำให้ Excel อ่านภาษาไทยถูกต้อง
+      const csv = '\uFEFF' + rows.map(function(row) { return row.map(cell).join(','); }).join('\r\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+      const empPart = lastLoadedRange.emp ? '_' + lastLoadedRange.emp.replace(/[^A-Za-z0-9_-]/g, '') : '';
+      const fileName = 'checkins_' + lastLoadedRange.from + '_to_' + lastLoadedRange.to + empPart + '.csv';
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(function() { URL.revokeObjectURL(a.href); }, 1000);
     }
 
     // ===== แก้ไขวันที่-เวลาของรายการเช็คอิน =====
