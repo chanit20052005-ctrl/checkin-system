@@ -152,6 +152,24 @@
     const auth = firebase.auth();
     const db = firebase.firestore();
 
+
+    // ===== วันที่วันนี้ตามเวลาเครื่อง (แก้ปัญหาวันที่เพี้ยนก่อน 07:00 น. จากการใช้เวลา UTC) =====
+    function todayLocalStr() {
+      const d = new Date();
+      return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    }
+
+    // ===== กันโค้ดแปลกปลอม (XSS): แปลงข้อความให้แสดงเป็นตัวอักษรธรรมดา =====
+    function escapeHtml(value) {
+      return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+    // ยอมให้เป็นลิงก์ได้เฉพาะที่ขึ้นต้นด้วย https:// เท่านั้น (กันลิงก์ javascript:)
+    function safeUrl(url) {
+      return (typeof url === 'string' && /^https:\/\//i.test(url)) ? url : '#';
+    }
+
     // ===== เข้ารหัสรหัสผ่านพนักงานด้วย SHA-256 (เหมือนฝั่ง index.html) =====
     async function sha256Hex(text) {
       const enc = new TextEncoder().encode(text);
@@ -224,7 +242,7 @@
         const fromInput = document.getElementById('adminCheckinDateFrom');
         const toInput = document.getElementById('adminCheckinDateTo');
         if (!fromInput.value || !toInput.value) {
-          const today = new Date().toISOString().slice(0, 10);
+          const today = todayLocalStr();
           fromInput.value = today;
           toInput.value = today;
         }
@@ -288,22 +306,25 @@
             String(r.time.getDate()).padStart(2, '0') + ' ' +
             String(r.time.getHours()).padStart(2, '0') + ':' +
             String(r.time.getMinutes()).padStart(2, '0');
-          const coordStr = (r.lat != null && r.lng != null) ? r.lat.toFixed(6) + ', ' + r.lng.toFixed(6) : '-';
+          const coordStr = (typeof r.lat === 'number' && typeof r.lng === 'number') ? r.lat.toFixed(6) + ', ' + r.lng.toFixed(6) : '-';
           div.innerHTML =
             '<div class="checkin-info">' +
-            '<div class="who">' + (r.employeeName || '-') + ' (' + r.employeeId + ')</div>' +
+            '<div class="who">' + escapeHtml(r.employeeName || '-') + ' (' + escapeHtml(r.employeeId) + ')</div>' +
             '<div class="time">🕒 ' + r.time.toLocaleString('th-TH') + '</div>' +
             '<div class="time">📍 ' + coordStr + '</div>' +
-            '<a href="' + r.mapLink + '" target="_blank">🗺️ แผนที่</a>' +
+            '<a href="' + escapeHtml(safeUrl(r.mapLink)) + '" target="_blank" rel="noopener">🗺️ แผนที่</a>' +
             '</div>' +
             '<div class="checkin-actions">' +
-            '<button class="edit" onclick="editCheckinTime(\'' + r.id + '\', \'' + timeInputVal + '\')">แก้เวลา</button>' +
-            '<button class="delete" onclick="deleteCheckin(\'' + r.id + '\')">ลบ</button>' +
+            '<button class="edit">แก้เวลา</button>' +
+            '<button class="delete">ลบ</button>' +
             '</div>';
+          // ผูกปุ่มด้วย addEventListener แทนการต่อข้อความใน onclick (ปลอดภัยกว่า)
+          div.querySelector('button.edit').addEventListener('click', function() { editCheckinTime(r.id, timeInputVal); });
+          div.querySelector('button.delete').addEventListener('click', function() { deleteCheckin(r.id); });
           listEl.appendChild(div);
         });
       } catch (err) {
-        listEl.innerHTML = '<div class="empty-note">โหลดไม่สำเร็จ: ' + err.message + '</div>';
+        listEl.innerHTML = '<div class="empty-note">โหลดไม่สำเร็จ: ' + escapeHtml(err.message) + '</div>';
       }
     }
 
@@ -355,21 +376,23 @@
           const emp = doc.data();
           const employeeId = doc.id;
           const displayName = emp.nickname ? (emp.name + ' (' + emp.nickname + ')') : emp.name;
-          const safeName = emp.name.replace(/'/g, "\\'");
-          const safeNickname = (emp.nickname || '').replace(/'/g, "\\'");
           const row = document.createElement('div');
           row.className = 'emp-row';
           row.innerHTML =
-            '<div class="info" style="cursor:pointer;" onclick="startEdit(\'' + employeeId + '\', \'' + safeName + '\', \'' + safeNickname + '\')">' +
-            displayName + '<div class="id">รหัส: ' + employeeId + ' · แตะเพื่อแก้ไข</div></div>' +
+            '<div class="info" style="cursor:pointer;">' +
+            escapeHtml(displayName) + '<div class="id">รหัส: ' + escapeHtml(employeeId) + ' · แตะเพื่อแก้ไข</div></div>' +
             '<div class="actions">' +
-            '<button class="reset" onclick="resetPassword(\'' + employeeId + '\')">รีเซ็ตรหัสผ่าน</button>' +
-            '<button class="delete" onclick="deleteEmployee(\'' + employeeId + '\')">ลบ</button>' +
+            '<button class="reset">รีเซ็ตรหัสผ่าน</button>' +
+            '<button class="delete">ลบ</button>' +
             '</div>';
+          // ผูกปุ่มด้วย addEventListener แทนการต่อข้อความใน onclick (ปลอดภัยกว่า)
+          row.querySelector('.info').addEventListener('click', function() { startEdit(employeeId, emp.name, emp.nickname || ''); });
+          row.querySelector('button.reset').addEventListener('click', function() { resetPassword(employeeId); });
+          row.querySelector('button.delete').addEventListener('click', function() { deleteEmployee(employeeId); });
           listEl.appendChild(row);
         });
       }).catch(function(err) {
-        listEl.innerHTML = '<div class="empty-note">โหลดไม่สำเร็จ: ' + err.message + '</div>';
+        listEl.innerHTML = '<div class="empty-note">โหลดไม่สำเร็จ: ' + escapeHtml(err.message) + '</div>';
       });
     }
 
