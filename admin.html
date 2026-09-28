@@ -1,141 +1,358 @@
 <!DOCTYPE html>
-<html>
+<html lang="th">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-  <title>จัดการพนักงาน</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>แผงแอดมิน - ระบบเช็คอินพนักงาน</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600&family=IBM+Plex+Sans+Thai:wght@400;500;600;700&display=swap">
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
   <style>
+    /* ===== โทนสีและฟอนต์ (ชุดเดียวกับหน้าพนักงาน) ===== */
+    :root {
+      --bg: #F4F2EE; --card: #FFFFFF; --ink: #1B1F23; --muted: #5B6167; --line: #E4E1DB; --line-soft: #F0EEE9;
+      --accent: #0F6B5C; --accent-dark: #0A4E43; --accent-soft: #EEF4F2;
+      --warn: #8A4B12; --warn-soft: #FBF0E4; --err: #B3261E; --err-soft: #FBEAE8; --disabled: #A9BDB8;
+      --font: 'IBM Plex Sans Thai', 'Sarabun', 'Segoe UI', sans-serif;
+      --num: 'Chakra Petch', 'IBM Plex Sans Thai', 'Segoe UI', sans-serif;
+    }
     * { box-sizing: border-box; }
-    body {
-      font-family: 'Sarabun', 'Segoe UI', sans-serif;
-      background: #f2f4f7;
-      margin: 0;
-      padding: 16px;
-      color: #1a1a1a;
-    }
-    .card {
-      max-width: 480px; margin: 0 auto; background: #fff; border-radius: 16px;
-      padding: 24px; box-shadow: 0 2px 12px rgba(0,0,0,0.08);
-    }
-    h1 { font-size: 20px; text-align: center; margin: 0 0 20px; color: #2c3e50; }
-    h2 { font-size: 16px; color: #2c3e50; margin: 24px 0 10px; }
-    label { display: block; font-size: 14px; font-weight: 600; margin: 14px 0 6px; color: #444; }
-    input[type="text"], input[type="password"], input[type="email"] {
-      width: 100%; padding: 11px; border: 1px solid #dcdfe4; border-radius: 10px;
-      font-size: 15px; background: #fafbfc;
-    }
-    button.primary {
-      width: 100%; margin-top: 16px; padding: 13px; background: #2c6ef2; color: #fff;
-      border: none; border-radius: 12px; font-size: 15px; font-weight: 600; cursor: pointer;
-    }
-    button.primary:disabled { background: #a9bdda; cursor: not-allowed; }
-    button.primary.export-btn { background: #1e7e42; }
-    .msg { margin-top: 12px; padding: 10px 12px; border-radius: 10px; font-size: 13px; display: none; }
-    .msg.ok { background: #e6f7ee; color: #1e7e42; display: block; }
-    .msg.err { background: #fdecea; color: #c0392b; display: block; }
-    .emp-row {
-      display: flex; justify-content: space-between; align-items: center;
-      padding: 10px 0; border-bottom: 1px solid #eee; font-size: 14px;
-    }
-    .emp-row .info { color: #444; }
-    .emp-row .info .id { font-size: 12px; color: #888; }
-    .emp-row .actions { display: flex; }
-    .emp-row button.delete {
-      background: #fdecea; color: #c0392b; border: none; border-radius: 8px;
-      padding: 6px 10px; font-size: 12px; cursor: pointer;
-    }
-    .emp-row button.reset {
-      background: #eef2f7; color: #2c6ef2; border: none; border-radius: 8px;
-      padding: 6px 10px; font-size: 12px; cursor: pointer; margin-right: 6px;
-    }
+    body { margin: 0; font-family: var(--font); background: var(--bg); color: var(--ink); -webkit-text-size-adjust: 100%; }
     .hidden { display: none !important; }
-    .empty-note { font-size: 13px; color: #888; padding: 10px 0; }
-    .logout-link {
-      display: block; text-align: right; font-size: 12px; color: #888;
-      margin-top: -10px; margin-bottom: 10px; cursor: pointer; text-decoration: underline;
+    .num { font-family: var(--num); font-variant-numeric: tabular-nums; }
+    .muted { color: var(--muted); }
+    button, input { font-family: var(--font); }
+    a { color: var(--accent); }
+    .card { background: var(--card); border-radius: 16px; }
+
+    .btn-primary {
+      min-height: 44px; border: none; border-radius: 12px; padding: 0 18px;
+      background: var(--accent); color: #fff; font-size: 15px; font-weight: 700;
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer;
     }
-    .tabs { display: flex; gap: 8px; margin-top: 10px; }
-    .tab-btn {
-      flex: 1; padding: 10px; border: 1px solid #dcdfe4; background: #fafbfc;
-      border-radius: 10px; font-size: 14px; cursor: pointer; color: #555;
+    .btn-primary:disabled { background: var(--disabled); cursor: not-allowed; }
+    .btn-text { border: none; background: transparent; padding: 8px; font-size: 13px; font-weight: 600; color: var(--ink); cursor: pointer; text-decoration: none; }
+    .btn-text.accent { color: var(--accent); }
+    .btn-text.danger { color: var(--err); }
+    .btn-quiet { border: none; background: transparent; padding: 8px 0; font-size: 13px; color: var(--muted); cursor: pointer; text-decoration: underline; }
+
+    label { display: block; font-size: 13px; font-weight: 600; margin: 0 0 6px; }
+    .field-label { color: var(--muted); font-size: 12px; }
+    input[type="text"], input[type="password"], input[type="date"], input[type="search"] {
+      width: 100%; height: 42px; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px;
+      font-size: 15px; background: #FAFAF8; color: var(--ink);
     }
-    .tab-btn.active { background: #2c6ef2; color: #fff; border-color: #2c6ef2; }
-    input[type="date"] {
-      width: 100%; padding: 11px; border: 1px solid #dcdfe4; border-radius: 10px;
-      font-size: 15px; background: #fafbfc; margin-top: 6px;
+    input:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: transparent; }
+    input:disabled { color: var(--muted); background: #F1F0EC; }
+
+    .msg { padding: 10px 12px; border-radius: 10px; font-size: 14px; display: none; margin-top: 10px; }
+    .msg.ok { background: var(--accent-soft); color: var(--accent-dark); display: block; }
+    .msg.err { background: var(--err-soft); color: var(--err); display: block; }
+    .empty-note { font-size: 14px; color: var(--muted); padding: 22px 16px; text-align: center; }
+
+    /* ===== ล็อกอิน ===== */
+    #loginScreen { max-width: 420px; margin: 0 auto; padding: 48px 18px; display: flex; flex-direction: column; gap: 16px; }
+    .brand-mark { width: 48px; height: 48px; border-radius: 14px; background: var(--accent); display: flex; align-items: center; justify-content: center; }
+    #loginScreen h1 { margin: 10px 0 0; font-size: 26px; }
+    #loginScreen .card { padding: 20px 18px; display: flex; flex-direction: column; gap: 14px; }
+    #loginScreen .btn-primary { width: 100%; min-height: 52px; font-size: 17px; margin-top: 4px; }
+
+    /* ===== โครงหน้าจัดการ ===== */
+    .app { display: flex; min-height: 100vh; }
+    .sidebar {
+      width: 232px; flex-shrink: 0; background: var(--card); border-right: 1px solid var(--line);
+      padding: 24px 16px; display: flex; flex-direction: column; gap: 6px; position: sticky; top: 0; height: 100vh;
     }
-    .checkin-item {
-      display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid #eee; align-items: center;
+    .sb-brand { display: flex; align-items: center; gap: 10px; padding: 0 8px 22px; }
+    .sb-brand .brand-mark { width: 36px; height: 36px; border-radius: 10px; }
+    .sb-brand .t1 { font-size: 15px; font-weight: 700; }
+    .sb-brand .t2 { font-size: 12px; color: var(--muted); }
+    .nav-btn {
+      display: flex; align-items: center; gap: 10px; border: none; border-radius: 10px; padding: 11px 12px;
+      background: transparent; color: var(--ink); font-size: 14px; font-weight: 500; text-align: left; cursor: pointer; width: 100%;
     }
-    .checkin-info { font-size: 13px; color: #444; flex: 1; }
-    .checkin-info .who { font-weight: 700; color: #2c3e50; }
-    .checkin-info .time { color: #666; margin: 2px 0; }
-    .checkin-info a { color: #2c6ef2; text-decoration: underline; font-size: 12px; }
-    .checkin-actions { display: flex; flex-direction: column; gap: 4px; }
-    .checkin-actions button {
-      border: none; border-radius: 8px; padding: 5px 8px; font-size: 11px; cursor: pointer;
+    .nav-btn.active { background: var(--accent-soft); color: var(--accent-dark); font-weight: 600; }
+    .sb-account { margin-top: auto; border-top: 1px solid var(--line); padding: 16px 8px 0; }
+    .sb-account .who { font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+
+    .mobile-top { display: none; }
+    .main { flex-grow: 1; min-width: 0; padding: 28px 32px 40px; display: flex; flex-direction: column; gap: 18px; }
+
+    .page-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
+    .page-head h2 { margin: 0; font-size: 26px; }
+    .page-head .sub { font-size: 14px; color: var(--muted); }
+
+    /* ===== แท็บเช็คอิน ===== */
+    .filters { padding: 14px 16px; display: flex; align-items: flex-end; gap: 14px; flex-wrap: wrap; }
+    .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+    .chip {
+      height: 40px; padding: 0 14px; border-radius: 10px; border: 1px solid var(--line); background: #fff;
+      color: var(--ink); font-size: 13px; cursor: pointer;
     }
-    .checkin-actions button.edit { background: #eef2f7; color: #2c6ef2; }
-    .checkin-actions button.delete { background: #fdecea; color: #c0392b; }
+    .chip.active { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-dark); font-weight: 600; }
+    .f-date { width: 150px; }
+    .f-emp { flex-grow: 1; min-width: 200px; }
+
+    .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+    .stat { background: var(--card); border-radius: 14px; padding: 14px 16px; }
+    .stat .l { font-size: 12px; color: var(--muted); }
+    .stat .v { font-size: 28px; font-weight: 600; }
+    .stat .v small { font-size: 15px; color: var(--muted); font-family: var(--font); font-weight: 500; }
+    .stat.warn { background: var(--warn-soft); }
+    .stat.warn .l, .stat.warn .v, .stat.warn .v small { color: var(--warn); }
+
+    .checkin-layout { display: flex; gap: 16px; align-items: flex-start; }
+    .table-card { flex-grow: 1; min-width: 0; overflow: hidden; }
+    .t-head, .t-row {
+      display: grid; grid-template-columns: 110px minmax(0, 1.4fr) minmax(0, 1.3fr) 120px 210px; gap: 12px;
+      padding: 11px 18px; align-items: center;
+    }
+    .t-head { font-size: 12px; font-weight: 600; color: var(--muted); border-bottom: 1px solid var(--line); padding-top: 12px; padding-bottom: 12px; }
+    .t-row { border-bottom: 1px solid var(--line-soft); font-size: 14px; }
+    .t-row:last-child { border-bottom: none; }
+    .c-time .tm { font-size: 16px; font-weight: 600; }
+    .c-time .dt { font-size: 12px; color: var(--muted); }
+    .c-who .nm { font-weight: 600; overflow-wrap: anywhere; }
+    .c-who .id, .c-coord { font-size: 12px; color: var(--muted); }
+    .c-coord { font-size: 13px; overflow-wrap: anywhere; }
+    .c-act { display: flex; justify-content: flex-end; gap: 2px; }
+    .badge { display: inline-block; font-size: 12px; font-weight: 600; padding: 4px 9px; border-radius: 999px; white-space: nowrap; }
+    .badge.gps { background: var(--accent-soft); color: var(--accent-dark); }
+    .badge.pin { background: var(--warn-soft); color: var(--warn); }
+
+    .missing-card { width: 272px; flex-shrink: 0; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+    .missing-card .hd { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+    .missing-card .hd .t { font-size: 15px; font-weight: 600; }
+    .missing-card .hd .n { font-size: 12px; font-weight: 600; color: var(--warn); white-space: nowrap; }
+    .m-item { display: flex; align-items: center; gap: 10px; padding: 4px 0; }
+    .m-ava { width: 32px; height: 32px; border-radius: 16px; background: var(--warn-soft); color: var(--warn); font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .m-item .nm { font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+    .m-item .id { font-size: 12px; color: var(--muted); }
+    .m-all { font-size: 13px; color: var(--accent-dark); background: var(--accent-soft); border-radius: 10px; padding: 10px 12px; }
+
+    /* ===== แท็บพนักงาน ===== */
+    .emp-layout { display: flex; gap: 20px; align-items: flex-start; }
+    .emp-table { flex-grow: 1; min-width: 0; overflow: hidden; }
+    .e-head, .e-row { display: grid; grid-template-columns: 120px minmax(0, 1.6fr) minmax(0, 1fr) 300px; gap: 12px; padding: 10px 18px; align-items: center; }
+    .e-head { font-size: 12px; font-weight: 600; color: var(--muted); border-bottom: 1px solid var(--line); padding-top: 12px; padding-bottom: 12px; }
+    .e-row { border-bottom: 1px solid var(--line-soft); font-size: 14px; }
+    .e-row:last-child { border-bottom: none; }
+    .e-row.editing { background: var(--accent-soft); }
+    .e-id { font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+    .e-name { font-weight: 600; overflow-wrap: anywhere; }
+    .e-nick { color: var(--muted); overflow-wrap: anywhere; }
+    .e-act { display: flex; justify-content: flex-end; gap: 2px; flex-wrap: wrap; }
+    .emp-form { width: 320px; flex-shrink: 0; padding: 20px; display: flex; flex-direction: column; gap: 12px; position: sticky; top: 20px; }
+    .emp-form h3 { margin: 0; font-size: 17px; }
+    .emp-form .btn-primary { width: 100%; margin-top: 4px; }
+    .emp-form .note { font-size: 12px; color: var(--muted); line-height: 1.5; }
+    .emp-search { width: 300px; }
+
+    /* ===== มือถือ / จอแคบ ===== */
+    @media (max-width: 900px) {
+      .app { display: block; }
+      .sidebar { display: none; }
+      .mobile-top { display: flex; flex-direction: column; gap: 12px; padding: 20px 16px 0; }
+      .mt-row { display: flex; justify-content: space-between; align-items: center; }
+      .mt-row .t { font-size: 20px; font-weight: 700; }
+      .mt-row .who { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+      .seg { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; background: #E9E6E0; border-radius: 12px; padding: 4px; }
+      .seg button { height: 40px; border: none; border-radius: 9px; background: transparent; font-size: 14px; color: var(--muted); cursor: pointer; }
+      .seg button.active { background: #fff; color: var(--ink); font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+      .main { padding: 14px 16px 90px; gap: 14px; }
+      .page-head h2 { font-size: 22px; }
+      .filters { padding: 12px; gap: 10px; }
+      .chips { width: 100%; }
+      .chip { height: 36px; border-radius: 999px; padding: 0 12px; }
+      .f-date { width: calc(50% - 5px); }
+      .f-emp { min-width: 100%; }
+      .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+      .stat { padding: 10px 12px; }
+      .stat .v { font-size: 22px; }
+      .checkin-layout, .emp-layout { flex-direction: column; align-items: stretch; }
+      .missing-card, .emp-form { width: auto; position: static; }
+      .emp-layout .emp-form { order: -1; }
+      .emp-search { width: 100%; }
+      .table-card, .emp-table { background: transparent; overflow: visible; }
+      .t-head, .e-head { display: none; }
+      .t-row {
+        grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "time who badge" "coord coord coord" "act act act";
+        background: #fff; border-radius: 14px; border: none; margin-bottom: 8px; padding: 12px 14px; gap: 4px 10px;
+      }
+      .t-row .c-time { grid-area: time; } .t-row .c-who { grid-area: who; } .t-row .c-badge { grid-area: badge; }
+      .t-row .c-coord { grid-area: coord; } .t-row .c-act { grid-area: act; justify-content: flex-start; margin-left: -8px; }
+      .e-row {
+        grid-template-columns: minmax(0, 1fr); background: #fff; border-radius: 14px; border: none; margin-bottom: 8px; padding: 12px 14px; gap: 2px;
+      }
+      .e-row .e-act { justify-content: flex-start; margin-left: -8px; }
+      .export-bar { position: fixed; left: 0; right: 0; bottom: 0; padding: 10px 16px 14px; background: linear-gradient(rgba(244,242,238,0), var(--bg) 30%); z-index: 5; }
+      .export-bar .btn-primary { width: 100%; min-height: 50px; }
+    }
   </style>
 </head>
 <body>
 
   <!-- ===== หน้าล็อกอินแอดมิน (Firebase Auth จริง) ===== -->
-  <div class="card" id="loginScreen">
-    <h1>🔑 เข้าสู่ระบบแอดมิน</h1>
-    <label>ชื่อผู้ใช้แอดมิน</label>
-    <input type="text" id="adminUsername" placeholder="เช่น chanyon.admin">
-    <label>รหัสผ่าน</label>
-    <input type="password" id="adminPassword" placeholder="รหัสผ่าน">
-    <button class="primary" onclick="doAdminLogin()">เข้าสู่ระบบ</button>
-    <div class="msg" id="loginMsg"></div>
+  <div id="loginScreen">
+    <div>
+      <div class="brand-mark" aria-hidden="true">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="11" rx="2"></rect><path d="M8 10V7a4 4 0 0 1 8 0v3"></path></svg>
+      </div>
+      <h1>แผงแอดมิน</h1>
+      <div class="muted">ระบบเช็คอินพนักงาน</div>
+    </div>
+    <div class="card">
+      <div>
+        <label for="adminUsername">ชื่อผู้ใช้แอดมิน</label>
+        <input type="text" id="adminUsername" placeholder="เช่น chanyon.admin" autocomplete="username">
+      </div>
+      <div>
+        <label for="adminPassword">รหัสผ่าน</label>
+        <input type="password" id="adminPassword" placeholder="รหัสผ่าน" autocomplete="current-password">
+      </div>
+      <button class="btn-primary" id="adminLoginBtn" onclick="doAdminLogin()">เข้าสู่ระบบ</button>
+      <div class="msg" id="loginMsg" style="margin-top: 0;"></div>
+    </div>
   </div>
 
-  <!-- ===== หน้าจัดการ (พนักงาน / เช็คอิน) ===== -->
-  <div class="card hidden" id="manageScreen">
-    <h1>⚙️ แผงแอดมิน</h1>
-    <div class="logout-link" onclick="doAdminLogout()">ออกจากระบบ</div>
-
-    <div class="tabs">
-      <button class="tab-btn active" id="tabBtnEmployees" onclick="switchTab('employees')">👥 พนักงาน</button>
-      <button class="tab-btn" id="tabBtnCheckins" onclick="switchTab('checkins')">📷 เช็คอิน</button>
-    </div>
-
-    <div id="employeesTab">
-      <h2 id="formTitle">เพิ่มพนักงานใหม่</h2>
-      <label>รหัสพนักงาน</label>
-      <input type="text" id="newEmpId" placeholder="เช่น 213456">
-      <label>ชื่อ-นามสกุล</label>
-      <input type="text" id="newEmpName" placeholder="เช่น สมชาย ใจดี">
-      <label>ชื่อเล่น (ไม่บังคับ)</label>
-      <input type="text" id="newEmpNickname" placeholder="เช่น ชาย">
-      <div id="passwordFieldWrapper">
-        <label>ตั้งรหัสผ่าน</label>
-        <input type="password" id="newEmpPassword" placeholder="ตั้งรหัสผ่านให้พนักงาน">
+  <!-- ===== หน้าจัดการ ===== -->
+  <div class="app hidden" id="manageScreen">
+    <!-- เมนูข้าง (คอมพิวเตอร์) -->
+    <aside class="sidebar">
+      <div class="sb-brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s7-6.2 7-12a7 7 0 1 0-14 0c0 5.8 7 12 7 12z"></path><circle cx="12" cy="10" r="2.5"></circle></svg>
+        </div>
+        <div><div class="t1">เช็คอินพนักงาน</div><div class="t2">แผงแอดมิน</div></div>
       </div>
-      <button class="primary" id="submitEmpBtn" onclick="addEmployee()">เพิ่มพนักงาน</button>
-      <div class="logout-link hidden" id="cancelEditLink" onclick="cancelEdit()">ยกเลิกการแก้ไข</div>
-      <div class="msg" id="addMsg"></div>
+      <button class="nav-btn active" data-tab="checkins" onclick="switchTab('checkins')">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>
+        รายการเช็คอิน
+      </button>
+      <button class="nav-btn" data-tab="employees" onclick="switchTab('employees')">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"></circle><path d="M2.5 20c.8-3.5 3.4-5.5 6.5-5.5s5.7 2 6.5 5.5"></path><path d="M16 4.5a3.5 3.5 0 0 1 0 7"></path><path d="M18 14.8c1.9.7 3.1 2.5 3.5 5.2"></path></svg>
+        พนักงาน
+      </button>
+      <div class="sb-account">
+        <div class="who adminWho"></div>
+        <button class="btn-quiet" onclick="doAdminLogout()">ออกจากระบบ</button>
+      </div>
+    </aside>
 
-      <h2>รายชื่อพนักงานทั้งหมด</h2>
-      <div id="employeeList"><div class="empty-note">กำลังโหลด...</div></div>
+    <!-- แถบบน (มือถือ) -->
+    <div class="mobile-top">
+      <div class="mt-row">
+        <div><div class="t">แผงแอดมิน</div><div class="who adminWho"></div></div>
+        <button class="btn-quiet" onclick="doAdminLogout()">ออกจากระบบ</button>
+      </div>
+      <div class="seg">
+        <button class="active" data-tab="checkins" onclick="switchTab('checkins')">รายการเช็คอิน</button>
+        <button data-tab="employees" onclick="switchTab('employees')">พนักงาน</button>
+      </div>
     </div>
 
-    <div id="checkinsTab" class="hidden">
-      <h2>รายการเช็คอิน</h2>
-      <label>จากวันที่</label>
-      <input type="date" id="adminCheckinDateFrom" onchange="loadCheckins()">
-      <label>ถึงวันที่</label>
-      <input type="date" id="adminCheckinDateTo" onchange="loadCheckins()">
-      <label>ตรวจสอบรายบุคคล (ไม่บังคับ)</label>
-      <input type="text" id="adminCheckinEmpFilter" placeholder="กรอกรหัสพนักงาน เช่น 213456" oninput="loadCheckins()">
-      <button class="primary export-btn hidden" id="exportCsvBtn" onclick="exportCheckinsCsv()">📥 ดาวน์โหลดเป็นไฟล์ Excel (CSV)</button>
-      <div id="checkinList" style="margin-top: 14px;"><div class="empty-note">เลือกช่วงวันที่เพื่อดูรายการ</div></div>
-    </div>
+    <main class="main">
+      <!-- ===== แท็บ: รายการเช็คอิน ===== -->
+      <section id="checkinsTab" style="display: flex; flex-direction: column; gap: inherit;">
+        <div class="page-head">
+          <div>
+            <h2>รายการเช็คอิน</h2>
+            <div class="sub" id="checkinSubtitle">–</div>
+          </div>
+          <div class="export-bar">
+            <button class="btn-primary" id="exportCsvBtn" disabled onclick="exportCheckinsCsv()">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"></path><path d="M7 10l5 5 5-5"></path><path d="M5 20h14"></path></svg>
+              ดาวน์โหลด Excel (CSV)
+            </button>
+          </div>
+        </div>
+
+        <div class="card filters">
+          <div>
+            <div class="field-label" style="font-weight: 600; margin-bottom: 6px;">ช่วงเวลา</div>
+            <div class="chips">
+              <button class="chip" data-range="today" onclick="setQuickRange('today')">วันนี้</button>
+              <button class="chip" data-range="yesterday" onclick="setQuickRange('yesterday')">เมื่อวาน</button>
+              <button class="chip" data-range="7days" onclick="setQuickRange('7days')">7 วันล่าสุด</button>
+              <button class="chip" data-range="month" onclick="setQuickRange('month')">เดือนนี้</button>
+            </div>
+          </div>
+          <div class="f-date">
+            <label class="field-label" for="adminCheckinDateFrom">จากวันที่</label>
+            <input type="date" id="adminCheckinDateFrom" onchange="loadCheckins()">
+          </div>
+          <div class="f-date">
+            <label class="field-label" for="adminCheckinDateTo">ถึงวันที่</label>
+            <input type="date" id="adminCheckinDateTo" onchange="loadCheckins()">
+          </div>
+          <div class="f-emp">
+            <label class="field-label" for="adminCheckinEmpFilter">พนักงาน</label>
+            <input type="search" id="adminCheckinEmpFilter" placeholder="ทุกคน · พิมพ์ชื่อ ชื่อเล่น หรือรหัสเพื่อกรอง" oninput="renderCheckins()">
+          </div>
+        </div>
+
+        <div class="stats">
+          <div class="stat"><div class="l">รายการเช็คอิน</div><div class="v num" id="statTotal">–</div></div>
+          <div class="stat"><div class="l">พนักงานที่เช็คอินแล้ว</div><div class="v num" id="statPeople">–</div></div>
+          <div class="stat warn"><div class="l" id="statMissingLabel">ยังไม่เช็คอิน</div><div class="v num" id="statMissing">–</div></div>
+          <div class="stat"><div class="l">ปักหมุดเอง</div><div class="v num" id="statPinned">–</div></div>
+        </div>
+
+        <div class="checkin-layout">
+          <div class="card table-card">
+            <div class="t-head"><div>เวลา</div><div>พนักงาน</div><div>พิกัด</div><div>ความแม่นยำ</div><div style="text-align: right;">จัดการ</div></div>
+            <div id="checkinList"><div class="empty-note">กำลังโหลด...</div></div>
+          </div>
+          <div class="card missing-card">
+            <div class="hd"><div class="t" id="missingTitle">ยังไม่เช็คอิน</div><div class="n" id="missingCount"></div></div>
+            <div id="missingList"><div class="empty-note" style="padding: 8px 0;">กำลังโหลด...</div></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== แท็บ: พนักงาน ===== -->
+      <section id="employeesTab" class="hidden" style="display: flex; flex-direction: column; gap: inherit;">
+        <div class="page-head">
+          <div>
+            <h2>พนักงาน</h2>
+            <div class="sub" id="empCount">–</div>
+          </div>
+          <input type="search" class="emp-search" id="empSearch" aria-label="ค้นหาพนักงาน" placeholder="ค้นหาชื่อ ชื่อเล่น หรือรหัส" oninput="renderEmployees()">
+        </div>
+        <div class="emp-layout">
+          <div class="card emp-table">
+            <div class="e-head"><div>รหัส</div><div>ชื่อ-นามสกุล</div><div>ชื่อเล่น</div><div style="text-align: right;">จัดการ</div></div>
+            <div id="employeeList"><div class="empty-note">กำลังโหลด...</div></div>
+          </div>
+          <div class="card emp-form" id="empForm">
+            <h3 id="formTitle">เพิ่มพนักงานใหม่</h3>
+            <div>
+              <label for="newEmpId">รหัสพนักงาน</label>
+              <input type="text" id="newEmpId" placeholder="เช่น 213456">
+            </div>
+            <div>
+              <label for="newEmpName">ชื่อ-นามสกุล</label>
+              <input type="text" id="newEmpName" placeholder="เช่น สมชาย ใจดี">
+            </div>
+            <div>
+              <label for="newEmpNickname">ชื่อเล่น <span class="muted" style="font-weight: 400;">(ไม่บังคับ)</span></label>
+              <input type="text" id="newEmpNickname" placeholder="เช่น ชาย">
+            </div>
+            <div id="passwordFieldWrapper">
+              <label for="newEmpPassword">ตั้งรหัสผ่าน</label>
+              <input type="password" id="newEmpPassword" placeholder="ตั้งรหัสผ่านให้พนักงาน" autocomplete="new-password">
+            </div>
+            <button class="btn-primary" id="submitEmpBtn" onclick="addEmployee()">เพิ่มพนักงาน</button>
+            <button class="btn-quiet hidden" id="cancelEditLink" onclick="cancelEdit()" style="align-self: center;">ยกเลิกการแก้ไข</button>
+            <div class="msg" id="addMsg" style="margin-top: 0;"></div>
+            <div class="note">รหัสพนักงานห้ามมีเครื่องหมาย / · กด "แก้ไข" ในรายชื่อ ฟอร์มนี้จะเปลี่ยนเป็นโหมดแก้ไข</div>
+          </div>
+        </div>
+      </section>
+    </main>
   </div>
 
   <script>
@@ -154,11 +371,12 @@
     const auth = firebase.auth();
     const db = firebase.firestore();
 
-
-    // ===== วันที่วันนี้ตามเวลาเครื่อง (แก้ปัญหาวันที่เพี้ยนก่อน 07:00 น. จากการใช้เวลา UTC) =====
-    function todayLocalStr() {
-      const d = new Date();
-      return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    // ===== วันที่ตามเวลาเครื่อง (แก้ปัญหาวันที่เพี้ยนก่อน 07:00 น. จากการใช้เวลา UTC) =====
+    function pad2(n) { return String(n).padStart(2, '0'); }
+    function dateStr(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
+    function todayLocalStr() { return dateStr(new Date()); }
+    function thaiDate(str) {
+      return new Date(str + 'T00:00:00').toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' });
     }
 
     // ===== กันโค้ดแปลกปลอม (XSS): แปลงข้อความให้แสดงเป็นตัวอักษรธรรมดา =====
@@ -185,11 +403,28 @@
       return (crypto.randomUUID ? crypto.randomUUID() : (Math.random().toString(36) + Date.now().toString(36)));
     }
 
+    // ===== ข้อมูลที่โหลดไว้ในหน้า =====
+    let employeesCache = [];          // [{id, name, nickname}] โหลดครั้งเดียวตอนเข้า + ตอนมีการแก้ไข
+    let employeesLoaded = null;       // Promise ของการโหลดรายชื่อล่าสุด
+    let rangeCheckins = [];           // เช็คอินทั้งหมดในช่วงวันที่ที่เลือก (ยังไม่กรองพนักงาน)
+    let rangeLoaded = { from: '', to: '' };
+    let lastLoadedCheckins = [];      // รายการที่แสดงอยู่ (หลังกรอง) ใช้ตอนดาวน์โหลดไฟล์
+    let lastLoadedRange = { from: '', to: '', emp: '' };
+    let appStarted = false;
+    let currentTab = 'checkins';
+    let checkinLoadSeq = 0;
+    let editingEmployeeId = null;     // รหัสพนักงานที่กำลังแก้ไข (null = โหมดเพิ่มใหม่)
+
     // ===== ล็อกอินแอดมิน =====
+    document.getElementById('adminPassword').addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') doAdminLogin();
+    });
+
     function doAdminLogin() {
       const username = document.getElementById('adminUsername').value.trim();
       const password = document.getElementById('adminPassword').value;
       const msg = document.getElementById('loginMsg');
+      const btn = document.getElementById('adminLoginBtn');
       msg.style.display = 'none';
 
       if (!username || !password) {
@@ -198,25 +433,43 @@
         msg.style.display = 'block';
         return;
       }
+      if (btn.disabled) return;
+      btn.disabled = true;
 
       const email = username.includes('@') ? username : username + ADMIN_EMAIL_DOMAIN;
-
       auth.signInWithEmailAndPassword(email, password)
-        .then(function() {
-          document.getElementById('loginScreen').classList.add('hidden');
-          document.getElementById('manageScreen').classList.remove('hidden');
-          loadEmployees();
-        })
-        .catch(function(err) {
+        .then(function() { enterApp(); })
+        .catch(function() {
           msg.className = 'msg err';
-          msg.textContent = '❌ เข้าสู่ระบบไม่สำเร็จ: รหัสผ่านหรือชื่อผู้ใช้ไม่ถูกต้อง';
+          msg.textContent = 'เข้าสู่ระบบไม่สำเร็จ: รหัสผ่านหรือชื่อผู้ใช้ไม่ถูกต้อง';
           msg.style.display = 'block';
-        });
+        })
+        .finally(function() { btn.disabled = false; });
+    }
+
+    // เข้าหน้าจัดการ (เรียกได้ทั้งจากการล็อกอินและจาก onAuthStateChanged แต่ทำงานครั้งเดียว)
+    function enterApp() {
+      if (appStarted) return;
+      appStarted = true;
+      const user = auth.currentUser;
+      const who = user && user.email ? user.email.replace(ADMIN_EMAIL_DOMAIN, '') : '';
+      document.querySelectorAll('.adminWho').forEach(function(el) { el.textContent = who; });
+      document.getElementById('loginScreen').classList.add('hidden');
+      document.getElementById('manageScreen').classList.remove('hidden');
+      loadEmployees();
+      switchTab('checkins');
     }
 
     function doAdminLogout() {
       auth.signOut().then(function() {
+        appStarted = false;
         cancelEdit();
+        employeesCache = []; rangeCheckins = []; lastLoadedCheckins = [];
+        rangeLoaded = { from: '', to: '' };
+        document.getElementById('adminCheckinDateFrom').value = '';
+        document.getElementById('adminCheckinDateTo').value = '';
+        document.getElementById('adminCheckinEmpFilter').value = '';
+        document.getElementById('empSearch').value = '';
         document.getElementById('manageScreen').classList.add('hidden');
         document.getElementById('loginScreen').classList.remove('hidden');
         document.getElementById('adminUsername').value = '';
@@ -224,124 +477,195 @@
       });
     }
 
-    // ===== สลับแท็บ พนักงาน / เช็คอิน =====
+    // ===== สลับแท็บ รายการเช็คอิน / พนักงาน =====
     function switchTab(tab) {
-      const empTab = document.getElementById('employeesTab');
-      const checkinTab = document.getElementById('checkinsTab');
-      const empBtn = document.getElementById('tabBtnEmployees');
-      const checkinBtn = document.getElementById('tabBtnCheckins');
-
-      if (tab === 'employees') {
-        empTab.classList.remove('hidden');
-        checkinTab.classList.add('hidden');
-        empBtn.classList.add('active');
-        checkinBtn.classList.remove('active');
-      } else {
-        empTab.classList.add('hidden');
-        checkinTab.classList.remove('hidden');
-        empBtn.classList.remove('active');
-        checkinBtn.classList.add('active');
+      currentTab = tab;
+      document.querySelectorAll('[data-tab]').forEach(function(b) {
+        b.classList.toggle('active', b.getAttribute('data-tab') === tab);
+      });
+      document.getElementById('checkinsTab').classList.toggle('hidden', tab !== 'checkins');
+      document.getElementById('employeesTab').classList.toggle('hidden', tab !== 'employees');
+      if (tab === 'checkins') {
         const fromInput = document.getElementById('adminCheckinDateFrom');
         const toInput = document.getElementById('adminCheckinDateTo');
         if (!fromInput.value || !toInput.value) {
-          const today = todayLocalStr();
-          fromInput.value = today;
-          toInput.value = today;
+          setQuickRange('today');
+          return;
         }
         loadCheckins();
       }
     }
 
-    // ===== โหลดรายการเช็คอินของวันที่เลือก (ทุกพนักงาน หรือกรองรายบุคคล) =====
-    let checkinLoadTimer = null;
-    let lastLoadedCheckins = [];  // รายการเช็คอินที่แสดงอยู่ล่าสุด (ใช้ตอนดาวน์โหลดไฟล์)
-    let lastLoadedRange = { from: '', to: '', emp: '' };
+    // ===== ปุ่มเลือกช่วงเร็ว =====
+    function quickRangeDates(kind) {
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      if (kind === 'today') return [dateStr(today), dateStr(today)];
+      if (kind === 'yesterday') { const y = new Date(today); y.setDate(y.getDate() - 1); return [dateStr(y), dateStr(y)]; }
+      if (kind === '7days') { const s = new Date(today); s.setDate(s.getDate() - 6); return [dateStr(s), dateStr(today)]; }
+      if (kind === 'month') { const s = new Date(today.getFullYear(), today.getMonth(), 1); return [dateStr(s), dateStr(today)]; }
+      return null;
+    }
+    function setQuickRange(kind) {
+      const r = quickRangeDates(kind);
+      if (!r) return;
+      document.getElementById('adminCheckinDateFrom').value = r[0];
+      document.getElementById('adminCheckinDateTo').value = r[1];
+      loadCheckins();
+    }
+    function highlightQuickRange(fromStr, toStr) {
+      document.querySelectorAll('.chip[data-range]').forEach(function(c) {
+        const r = quickRangeDates(c.getAttribute('data-range'));
+        c.classList.toggle('active', !!r && r[0] === fromStr && r[1] === toStr);
+      });
+    }
+
+    // ===== โหลดเช็คอิน: ดึงเฉพาะช่วงวันที่ที่เลือก (ประหยัดโควตาการอ่าน) =====
     function loadCheckins() {
-      // หน่วงเวลาเล็กน้อยตอนพิมพ์รหัสพนักงาน กันยิง query รัวทุกตัวอักษร
-      clearTimeout(checkinLoadTimer);
-      checkinLoadTimer = setTimeout(doLoadCheckins, 300);
+      doLoadCheckins();
     }
 
     async function doLoadCheckins() {
       let fromStr = document.getElementById('adminCheckinDateFrom').value;
       let toStr = document.getElementById('adminCheckinDateTo').value;
-      const empFilter = document.getElementById('adminCheckinEmpFilter').value.trim();
       const listEl = document.getElementById('checkinList');
       if (!fromStr || !toStr) return;
 
       // ถ้าเผลอเลือกวันที่ "ถึง" มาก่อนวันที่ "จาก" ให้สลับให้อัตโนมัติ
       if (toStr < fromStr) { const tmp = fromStr; fromStr = toStr; toStr = tmp; }
+      highlightQuickRange(fromStr, toStr);
 
+      const mySeq = ++checkinLoadSeq;
       listEl.innerHTML = '<div class="empty-note">กำลังโหลด...</div>';
-      lastLoadedCheckins = [];
-      document.getElementById('exportCsvBtn').classList.add('hidden');
+      document.getElementById('exportCsvBtn').disabled = true;
+      rangeCheckins = []; lastLoadedCheckins = [];
 
       try {
-        // ถ้ากรอกรหัสพนักงาน ให้ค้นเฉพาะคนนั้น (ประหยัดโควตาการอ่านกว่าดึงทั้งหมด)
-        const snapshot = empFilter
-          ? await db.collection('checkins').where('employeeId', '==', empFilter).get()
-          : await db.collection('checkins').get();
-
         const selectedStart = new Date(fromStr + 'T00:00:00');
         const selectedEnd = new Date(toStr + 'T00:00:00');
         selectedEnd.setDate(selectedEnd.getDate() + 1); // รวมทั้งวันสุดท้ายด้วย
+
+        // query ช่วงเวลาบนฟิลด์ timestamp ฟิลด์เดียว → ใช้ index อัตโนมัติของ Firestore ไม่ต้องสร้างเพิ่ม
+        const snapshot = await db.collection('checkins')
+          .where('timestamp', '>=', firebase.firestore.Timestamp.fromDate(selectedStart))
+          .where('timestamp', '<', firebase.firestore.Timestamp.fromDate(selectedEnd))
+          .get();
+        if (mySeq !== checkinLoadSeq) return; // มีการเปลี่ยนวันที่ใหม่ระหว่างรอ
 
         const records = [];
         snapshot.forEach(function(doc) {
           const data = doc.data();
           if (data.timestamp && data.timestamp.toDate) {
-            const t = data.timestamp.toDate();
-            if (t >= selectedStart && t < selectedEnd) {
-              records.push({ id: doc.id, time: t, employeeName: data.employeeName, employeeId: data.employeeId, mapLink: data.mapLink, lat: data.lat, lng: data.lng, accuracy: data.accuracy });
-            }
+            records.push({ id: doc.id, time: data.timestamp.toDate(), employeeName: data.employeeName, employeeId: data.employeeId, mapLink: data.mapLink, lat: data.lat, lng: data.lng, accuracy: data.accuracy });
           }
         });
         records.sort(function(a, b) { return b.time - a.time; });
-
-        if (records.length === 0) {
-          listEl.innerHTML = '<div class="empty-note">' + (empFilter ? 'ไม่มีรายการเช็คอินของรหัสพนักงานนี้ในช่วงวันที่เลือก' : 'ไม่มีรายการเช็คอินในช่วงวันที่เลือก') + '</div>';
-          return;
-        }
-
-        lastLoadedCheckins = records;
-        lastLoadedRange = { from: fromStr, to: toStr, emp: empFilter };
-        document.getElementById('exportCsvBtn').classList.remove('hidden');
-
-        listEl.innerHTML = '';
-        records.forEach(function(r) {
-          const div = document.createElement('div');
-          div.className = 'checkin-item';
-          const timeInputVal = r.time.getFullYear() + '-' +
-            String(r.time.getMonth() + 1).padStart(2, '0') + '-' +
-            String(r.time.getDate()).padStart(2, '0') + ' ' +
-            String(r.time.getHours()).padStart(2, '0') + ':' +
-            String(r.time.getMinutes()).padStart(2, '0');
-          const coordStr = (typeof r.lat === 'number' && typeof r.lng === 'number') ? r.lat.toFixed(6) + ', ' + r.lng.toFixed(6) : '-';
-          div.innerHTML =
-            '<div class="checkin-info">' +
-            '<div class="who">' + escapeHtml(r.employeeName || '-') + ' (' + escapeHtml(r.employeeId) + ')</div>' +
-            '<div class="time">🕒 ' + r.time.toLocaleString('th-TH') + '</div>' +
-            '<div class="time">📍 ' + coordStr + '</div>' +
-            '<a href="' + escapeHtml(safeUrl(r.mapLink)) + '" target="_blank" rel="noopener">🗺️ แผนที่</a>' +
-            '</div>' +
-            '<div class="checkin-actions">' +
-            '<button class="edit">แก้เวลา</button>' +
-            '<button class="delete">ลบ</button>' +
-            '</div>';
-          // ผูกปุ่มด้วย addEventListener แทนการต่อข้อความใน onclick (ปลอดภัยกว่า)
-          div.querySelector('button.edit').addEventListener('click', function() { editCheckinTime(r.id, timeInputVal); });
-          div.querySelector('button.delete').addEventListener('click', function() { deleteCheckin(r.id); });
-          listEl.appendChild(div);
-        });
+        rangeCheckins = records;
+        rangeLoaded = { from: fromStr, to: toStr };
+        if (employeesLoaded) { try { await employeesLoaded; } catch (e) {} }
+        if (mySeq !== checkinLoadSeq) return;
+        renderCheckins();
       } catch (err) {
+        if (mySeq !== checkinLoadSeq) return;
         listEl.innerHTML = '<div class="empty-note">โหลดไม่สำเร็จ: ' + escapeHtml(err.message) + '</div>';
+        document.getElementById('missingList').innerHTML = '';
       }
+    }
+
+    // ข้อความกรองพนักงาน: ตรงกับรหัส ชื่อ หรือชื่อเล่น (ไม่สนตัวพิมพ์เล็กใหญ่)
+    function empMatches(filter, id, name, nickname) {
+      if (!filter) return true;
+      const f = filter.toLowerCase();
+      return String(id || '').toLowerCase().includes(f) || String(name || '').toLowerCase().includes(f) || String(nickname || '').toLowerCase().includes(f);
+    }
+    function nicknameOf(employeeId) {
+      const e = employeesCache.find(function(x) { return x.id === employeeId; });
+      return e ? e.nickname : '';
+    }
+
+    // ===== แสดงรายการเช็คอิน + ตัวเลขสรุป + รายชื่อคนที่ยังไม่เช็คอิน (ไม่อ่าน Firestore เพิ่ม) =====
+    function renderCheckins() {
+      const listEl = document.getElementById('checkinList');
+      const filter = document.getElementById('adminCheckinEmpFilter').value.trim();
+      const fromStr = rangeLoaded.from, toStr = rangeLoaded.to;
+      if (!fromStr) return;
+      const singleDay = fromStr === toStr;
+
+      const shown = rangeCheckins.filter(function(r) { return empMatches(filter, r.employeeId, r.employeeName, nicknameOf(r.employeeId)); });
+      lastLoadedCheckins = shown;
+      lastLoadedRange = { from: fromStr, to: toStr, emp: filter };
+      document.getElementById('exportCsvBtn').disabled = shown.length === 0;
+
+      // หัวเรื่องย่อย
+      const rangeText = singleDay ? thaiDate(fromStr) : (thaiDate(fromStr) + ' – ' + thaiDate(toStr));
+      document.getElementById('checkinSubtitle').textContent = rangeText + ' · ' + (filter ? 'กรอง: ' + filter : 'ทุกคน');
+
+      // ตัวเลขสรุป
+      const peopleIn = {};
+      shown.forEach(function(r) { peopleIn[r.employeeId] = true; });
+      const visibleEmployees = employeesCache.filter(function(e) { return empMatches(filter, e.id, e.name, e.nickname); });
+      const missing = visibleEmployees.filter(function(e) { return !peopleIn[e.id]; });
+      document.getElementById('statTotal').textContent = shown.length;
+      document.getElementById('statPeople').innerHTML = Object.keys(peopleIn).length + ' <small>/ ' + visibleEmployees.length + ' คน</small>';
+      document.getElementById('statMissing').innerHTML = missing.length + ' <small>คน</small>';
+      document.getElementById('statPinned').innerHTML = shown.filter(function(r) { return typeof r.accuracy !== 'number'; }).length + ' <small>รายการ</small>';
+      const missingLabel = singleDay ? (fromStr === todayLocalStr() ? 'ยังไม่เช็คอินวันนี้' : 'ไม่ได้เช็คอินวันนั้น') : 'ไม่มีเช็คอินในช่วงนี้';
+      document.getElementById('statMissingLabel').textContent = missingLabel;
+      document.getElementById('missingTitle').textContent = missingLabel;
+      document.getElementById('missingCount').textContent = missing.length + ' คน';
+
+      // รายชื่อคนที่ยังไม่เช็คอิน
+      const mEl = document.getElementById('missingList');
+      mEl.innerHTML = '';
+      if (employeesCache.length === 0) {
+        mEl.innerHTML = '<div class="empty-note" style="padding: 8px 0;">ยังไม่มีรายชื่อพนักงาน</div>';
+      } else if (missing.length === 0) {
+        mEl.innerHTML = '<div class="m-all">ทุกคนเช็คอินแล้ว</div>';
+      } else {
+        missing.forEach(function(e) {
+          const div = document.createElement('div');
+          div.className = 'm-item';
+          const label = e.nickname ? (e.name + ' (' + e.nickname + ')') : e.name;
+          div.innerHTML = '<div class="m-ava">' + escapeHtml(String(e.nickname || e.name || '?').charAt(0)) + '</div>' +
+            '<div style="min-width:0"><div class="nm">' + escapeHtml(label) + '</div><div class="id">รหัส ' + escapeHtml(e.id) + '</div></div>';
+          mEl.appendChild(div);
+        });
+      }
+
+      // รายการเช็คอิน
+      if (shown.length === 0) {
+        listEl.innerHTML = '<div class="empty-note">' + (filter ? 'ไม่มีรายการเช็คอินที่ตรงกับ "' + escapeHtml(filter) + '" ในช่วงวันที่เลือก' : 'ไม่มีรายการเช็คอินในช่วงวันที่เลือก') + '</div>';
+        return;
+      }
+      listEl.innerHTML = '';
+      shown.forEach(function(r) {
+        const div = document.createElement('div');
+        div.className = 't-row';
+        const timeInputVal = dateStr(r.time) + ' ' + pad2(r.time.getHours()) + ':' + pad2(r.time.getMinutes());
+        const coordStr = (typeof r.lat === 'number' && typeof r.lng === 'number') ? r.lat.toFixed(6) + ', ' + r.lng.toFixed(6) : '-';
+        const isGps = typeof r.accuracy === 'number';
+        const nick = nicknameOf(r.employeeId);
+        div.innerHTML =
+          '<div class="c-time"><div class="tm num">' + pad2(r.time.getHours()) + ':' + pad2(r.time.getMinutes()) + '</div>' +
+            (singleDay ? '' : '<div class="dt">' + escapeHtml(r.time.toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })) + '</div>') + '</div>' +
+          '<div class="c-who"><div class="nm">' + escapeHtml((r.employeeName || '-') + (nick ? ' (' + nick + ')' : '')) + '</div><div class="id">รหัส ' + escapeHtml(r.employeeId) + '</div></div>' +
+          '<div class="c-coord">' + escapeHtml(coordStr) + '</div>' +
+          '<div class="c-badge"><span class="badge ' + (isGps ? 'gps' : 'pin') + '">' + (isGps ? 'GPS ~' + escapeHtml(r.accuracy) + ' ม.' : 'ปักหมุดเอง') + '</span></div>' +
+          '<div class="c-act">' +
+            '<a class="btn-text accent" href="' + escapeHtml(safeUrl(r.mapLink)) + '" target="_blank" rel="noopener">แผนที่</a>' +
+            '<button class="btn-text edit">แก้เวลา</button>' +
+            '<button class="btn-text danger delete">ลบ</button>' +
+          '</div>';
+        // ผูกปุ่มด้วย addEventListener แทนการต่อข้อความใน onclick (ปลอดภัยกว่า)
+        div.querySelector('button.edit').addEventListener('click', function() { editCheckinTime(r.id, timeInputVal); });
+        div.querySelector('button.delete').addEventListener('click', function() { deleteCheckin(r.id); });
+        listEl.appendChild(div);
+      });
     }
 
     // ===== ดาวน์โหลดรายการเช็คอินที่แสดงอยู่เป็นไฟล์ CSV (เปิดด้วย Excel ได้, ไม่อ่าน Firestore เพิ่ม) =====
     function exportCheckinsCsv() {
       if (lastLoadedCheckins.length === 0) return;
-      const pad = function(n) { return String(n).padStart(2, '0'); };
       // ครอบทุกช่องด้วย "..." และกันสูตร Excel แปลกปลอม (ค่าที่ขึ้นต้นด้วย = + - @)
       const cell = function(value) {
         let v = String(value == null ? '' : value);
@@ -353,8 +677,8 @@
       lastLoadedCheckins.slice().sort(function(a, b) { return a.time - b.time; }).forEach(function(r) {
         const t = r.time;
         rows.push([
-          t.getFullYear() + '-' + pad(t.getMonth() + 1) + '-' + pad(t.getDate()),
-          pad(t.getHours()) + ':' + pad(t.getMinutes()) + ':' + pad(t.getSeconds()),
+          dateStr(t),
+          pad2(t.getHours()) + ':' + pad2(t.getMinutes()) + ':' + pad2(t.getSeconds()),
           r.employeeId,
           r.employeeName,
           typeof r.lat === 'number' ? r.lat.toFixed(6) : '',
@@ -367,7 +691,7 @@
       const csv = '\uFEFF' + rows.map(function(row) { return row.map(cell).join(','); }).join('\r\n');
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
       const empPart = lastLoadedRange.emp ? '_' + lastLoadedRange.emp.replace(/[^A-Za-z0-9_-]/g, '') : '';
-      const fileName = 'checkins_' + lastLoadedRange.from + '_to_' + lastLoadedRange.to + empPart + '.csv';
+      const fileName = 'checkins_' + lastLoadedRange.from + '_to_' + lastLoadedRange.to + (empPart === '_' ? '_filtered' : empPart) + '.csv';
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = fileName;
@@ -382,9 +706,9 @@
       const newTimeStr = prompt('แก้ไขวันที่-เวลา (รูปแบบ: YYYY-MM-DD HH:MM)', currentTimeStr);
       if (!newTimeStr) return;
 
-      const parsed = new Date(newTimeStr.replace(' ', 'T'));
+      const parsed = new Date(newTimeStr.trim().replace(' ', 'T'));
       if (isNaN(parsed.getTime())) {
-        alert('❌ รูปแบบวันที่ไม่ถูกต้อง กรุณาใช้รูปแบบ YYYY-MM-DD HH:MM');
+        alert('รูปแบบวันที่ไม่ถูกต้อง กรุณาใช้รูปแบบ YYYY-MM-DD HH:MM');
         return;
       }
 
@@ -392,10 +716,10 @@
         await db.collection('checkins').doc(checkinId).update({
           timestamp: firebase.firestore.Timestamp.fromDate(parsed)
         });
-        alert('✅ แก้ไขเวลาเรียบร้อยแล้ว');
+        alert('แก้ไขเวลาเรียบร้อยแล้ว');
         loadCheckins();
       } catch (err) {
-        alert('❌ เกิดข้อผิดพลาด: ' + err.message);
+        alert('เกิดข้อผิดพลาด: ' + err.message);
       }
     }
 
@@ -406,46 +730,65 @@
         await db.collection('checkins').doc(checkinId).delete();
         loadCheckins();
       } catch (err) {
-        alert('❌ เกิดข้อผิดพลาด: ' + err.message);
+        alert('เกิดข้อผิดพลาด: ' + err.message);
       }
     }
 
-    // ===== โหลดรายชื่อพนักงาน =====
+    // ===== โหลดรายชื่อพนักงาน (เก็บไว้ใช้ทั้งแท็บพนักงาน และตัวเลขสรุปในแท็บเช็คอิน) =====
     function loadEmployees() {
       const listEl = document.getElementById('employeeList');
       listEl.innerHTML = '<div class="empty-note">กำลังโหลด...</div>';
-
-      db.collection('employees').get().then(function(snapshot) {
-        if (snapshot.empty) {
-          listEl.innerHTML = '<div class="empty-note">ยังไม่มีพนักงานในระบบ</div>';
-          return;
-        }
-        listEl.innerHTML = '';
+      employeesLoaded = db.collection('employees').get().then(function(snapshot) {
+        const list = [];
         snapshot.forEach(function(doc) {
           const emp = doc.data();
-          const employeeId = doc.id;
-          const displayName = emp.nickname ? (emp.name + ' (' + emp.nickname + ')') : emp.name;
-          const row = document.createElement('div');
-          row.className = 'emp-row';
-          row.innerHTML =
-            '<div class="info" style="cursor:pointer;">' +
-            escapeHtml(displayName) + '<div class="id">รหัส: ' + escapeHtml(employeeId) + ' · แตะเพื่อแก้ไข</div></div>' +
-            '<div class="actions">' +
-            '<button class="reset">รีเซ็ตรหัสผ่าน</button>' +
-            '<button class="delete">ลบ</button>' +
-            '</div>';
-          // ผูกปุ่มด้วย addEventListener แทนการต่อข้อความใน onclick (ปลอดภัยกว่า)
-          row.querySelector('.info').addEventListener('click', function() { startEdit(employeeId, emp.name, emp.nickname || ''); });
-          row.querySelector('button.reset').addEventListener('click', function() { resetPassword(employeeId); });
-          row.querySelector('button.delete').addEventListener('click', function() { deleteEmployee(employeeId); });
-          listEl.appendChild(row);
+          list.push({ id: doc.id, name: emp.name || '', nickname: emp.nickname || '' });
         });
+        list.sort(function(a, b) { return a.id.localeCompare(b.id, 'th', { numeric: true }); });
+        employeesCache = list;
+        renderEmployees();
+        if (rangeLoaded.from) renderCheckins(); // อัปเดตตัวเลขสรุป/รายชื่อคนที่ยังไม่เช็คอินด้วย
       }).catch(function(err) {
         listEl.innerHTML = '<div class="empty-note">โหลดไม่สำเร็จ: ' + escapeHtml(err.message) + '</div>';
+        throw err;
       });
+      employeesLoaded.catch(function() {});
+      return employeesLoaded;
     }
 
-    let editingEmployeeId = null;
+    function renderEmployees() {
+      const listEl = document.getElementById('employeeList');
+      const q = document.getElementById('empSearch').value.trim();
+      document.getElementById('empCount').textContent = 'ทั้งหมด ' + employeesCache.length + ' คน';
+      if (employeesCache.length === 0) {
+        listEl.innerHTML = '<div class="empty-note">ยังไม่มีพนักงานในระบบ</div>';
+        return;
+      }
+      const shown = employeesCache.filter(function(e) { return empMatches(q, e.id, e.name, e.nickname); });
+      if (shown.length === 0) {
+        listEl.innerHTML = '<div class="empty-note">ไม่พบพนักงานที่ตรงกับ "' + escapeHtml(q) + '"</div>';
+        return;
+      }
+      listEl.innerHTML = '';
+      shown.forEach(function(emp) {
+        const row = document.createElement('div');
+        row.className = 'e-row' + (emp.id === editingEmployeeId ? ' editing' : '');
+        row.innerHTML =
+          '<div class="e-id num">' + escapeHtml(emp.id) + '</div>' +
+          '<div class="e-name">' + escapeHtml(emp.name) + '</div>' +
+          '<div class="e-nick">' + (emp.nickname ? escapeHtml(emp.nickname) : '–') + '</div>' +
+          '<div class="e-act">' +
+            '<button class="btn-text accent edit">แก้ไข</button>' +
+            '<button class="btn-text reset">รีเซ็ตรหัสผ่าน</button>' +
+            '<button class="btn-text danger delete">ลบ</button>' +
+          '</div>';
+        // ผูกปุ่มด้วย addEventListener แทนการต่อข้อความใน onclick (ปลอดภัยกว่า)
+        row.querySelector('button.edit').addEventListener('click', function() { startEdit(emp.id, emp.name, emp.nickname); });
+        row.querySelector('button.reset').addEventListener('click', function() { resetPassword(emp.id); });
+        row.querySelector('button.delete').addEventListener('click', function() { deleteEmployee(emp.id); });
+        listEl.appendChild(row);
+      });
+    }
 
     // ===== เพิ่มพนักงานใหม่ / บันทึกการแก้ไข (ปุ่มเดียวกัน แยกโหมดกัน) =====
     async function addEmployee() {
@@ -475,6 +818,8 @@
         return;
       }
 
+      const btn = document.getElementById('submitEmpBtn');
+      btn.disabled = true;
       try {
         const existing = await db.collection('employees').doc(employeeId).get();
         if (existing.exists) {
@@ -492,7 +837,7 @@
         });
 
         msg.className = 'msg ok';
-        msg.textContent = '✅ เพิ่ม "' + name + '" เรียบร้อยแล้ว';
+        msg.textContent = 'เพิ่ม "' + name + '" เรียบร้อยแล้ว';
         msg.style.display = 'block';
         document.getElementById('newEmpId').value = '';
         document.getElementById('newEmpName').value = '';
@@ -501,12 +846,14 @@
         loadEmployees();
       } catch (err) {
         msg.className = 'msg err';
-        msg.textContent = '❌ ' + err.message;
+        msg.textContent = err.message;
         msg.style.display = 'block';
+      } finally {
+        btn.disabled = false;
       }
     }
 
-    // ===== เริ่มแก้ไขพนักงาน (คลิกที่ชื่อในรายชื่อ) =====
+    // ===== เริ่มแก้ไขพนักงาน (กด "แก้ไข" ในรายชื่อ) =====
     function startEdit(employeeId, name, nickname) {
       editingEmployeeId = employeeId;
       document.getElementById('formTitle').textContent = 'แก้ไขข้อมูลพนักงาน';
@@ -518,7 +865,9 @@
       document.getElementById('submitEmpBtn').textContent = 'บันทึกการแก้ไข';
       document.getElementById('cancelEditLink').classList.remove('hidden');
       document.getElementById('addMsg').style.display = 'none';
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      renderEmployees();
+      document.getElementById('empForm').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      document.getElementById('newEmpName').focus({ preventScroll: true });
     }
 
     // ===== ยกเลิกการแก้ไข กลับไปโหมดเพิ่มพนักงาน =====
@@ -533,6 +882,7 @@
       document.getElementById('submitEmpBtn').textContent = 'เพิ่มพนักงาน';
       document.getElementById('cancelEditLink').classList.add('hidden');
       document.getElementById('addMsg').style.display = 'none';
+      renderEmployees();
     }
 
     // ===== บันทึกการแก้ไขชื่อ/ชื่อเล่น (ไม่แตะรหัสผ่าน) =====
@@ -554,14 +904,14 @@
           name: name,
           nickname: nickname || ''
         });
-        msg.className = 'msg ok';
-        msg.textContent = '✅ บันทึกการแก้ไขเรียบร้อยแล้ว';
-        msg.style.display = 'block';
         cancelEdit();
+        msg.className = 'msg ok';
+        msg.textContent = 'บันทึกการแก้ไขเรียบร้อยแล้ว';
+        msg.style.display = 'block';
         loadEmployees();
       } catch (err) {
         msg.className = 'msg err';
-        msg.textContent = '❌ ' + err.message;
+        msg.textContent = err.message;
         msg.style.display = 'block';
       }
     }
@@ -578,9 +928,9 @@
           passwordHash: hash,
           salt: salt
         });
-        alert('✅ ตั้งรหัสผ่านใหม่ให้รหัสพนักงาน ' + employeeId + ' เรียบร้อยแล้ว');
+        alert('ตั้งรหัสผ่านใหม่ให้รหัสพนักงาน ' + employeeId + ' เรียบร้อยแล้ว');
       } catch (err) {
-        alert('❌ เกิดข้อผิดพลาด: ' + err.message);
+        alert('เกิดข้อผิดพลาด: ' + err.message);
       }
     }
 
@@ -589,19 +939,16 @@
       if (!confirm('ยืนยันลบพนักงานรหัส ' + employeeId + ' ออกจากระบบ?')) return;
       try {
         await db.collection('employees').doc(employeeId).delete();
+        if (editingEmployeeId === employeeId) cancelEdit();
         loadEmployees();
       } catch (err) {
-        alert('❌ เกิดข้อผิดพลาด: ' + err.message);
+        alert('เกิดข้อผิดพลาด: ' + err.message);
       }
     }
 
     // ===== เช็คสถานะล็อกอินตอนเปิดหน้า (เผื่อยังไม่ได้ signOut) =====
     auth.onAuthStateChanged(function(user) {
-      if (user) {
-        document.getElementById('loginScreen').classList.add('hidden');
-        document.getElementById('manageScreen').classList.remove('hidden');
-        loadEmployees();
-      }
+      if (user) enterApp();
     });
   </script>
 </body>
