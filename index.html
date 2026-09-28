@@ -322,6 +322,8 @@
     var checkedInThisSession = false; // เช็คอินจุดปัจจุบันสำเร็จแล้ว (กันกดส่งซ้ำโดยไม่ตั้งใจ)
     var gpsRun = 0;                   // เลขรอบการขอ GPS (กันผลของรอบเก่ามาทับรอบใหม่)
     var clockTimer = null;
+    var shownDay = null;              // วันที่ที่ไทม์ไลน์กำลังแสดงอยู่ (ใช้ตรวจตอนข้ามเที่ยงคืน)
+    const GOOD_ACCURACY_M = 50;       // ความแม่นยำไม่เกินนี้ (เมตร) = ถือว่าได้ตำแหน่ง, เกินนี้ = เตือน + เปิดแผนที่ให้ปักหมุด
 
     // ===== เข้ารหัสรหัสผ่านด้วย SHA-256 (Web Crypto API) =====
     async function sha256Hex(text) {
@@ -344,9 +346,21 @@
     // ===== นาฬิกาและวันที่ด้านบน =====
     function tickClock() {
       const now = new Date();
+      // ข้ามเที่ยงคืนระหว่างเปิดหน้าค้างไว้ → ล้างไทม์ไลน์ของเมื่อวาน แล้วโหลดของวันใหม่
+      if (loggedInId && shownDay && todayLocalStr() !== shownDay) {
+        shownDay = todayLocalStr();
+        todayCheckins = []; localNewCheckins = []; todayLoaded = false;
+        renderTimeline();
+        loadTodayStatus();
+      }
       document.getElementById('clock').textContent = hhmm(now);
       document.getElementById('todayDate').textContent = now.toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' });
     }
+
+    // มือถือมักหยุดนาฬิกาตอนสลับไปแอปอื่น → กลับมาที่หน้านี้เมื่อไหร่ให้อัปเดตทันที
+    document.addEventListener('visibilitychange', function() {
+      if (!document.hidden && clockTimer) tickClock();
+    });
 
     // ===== ล็อกอิน =====
     async function doLogin() {
@@ -383,6 +397,7 @@
         document.getElementById('displayId').textContent = (emp.nickname ? emp.name + ' · ' : '') + 'รหัส ' + loggedInId;
 
         resetCheckinScreen();
+        shownDay = todayLocalStr();
         tickClock();
         if (clockTimer) clearInterval(clockTimer);
         clockTimer = setInterval(tickClock, 1000);
@@ -423,6 +438,7 @@
 
     function logout() {
       loggedInName = null; loggedInId = null; loggedInDisplayName = null;
+      shownDay = null;
       resetCheckinScreen();
       if (clockTimer) { clearInterval(clockTimer); clockTimer = null; }
       document.getElementById('loginId').value = '';
@@ -565,7 +581,7 @@
         if (stale()) return;
         setLocation(lat, lng, accuracy);
         retryBtn.classList.remove('hidden');
-        if (accuracy <= 100) {
+        if (accuracy <= GOOD_ACCURACY_M) {
           statusEl.textContent = 'ได้ตำแหน่งแล้ว · แม่นยำ ~' + Math.round(accuracy) + ' ม.';
           statusEl.className = 'gps-status ok';
         } else {
