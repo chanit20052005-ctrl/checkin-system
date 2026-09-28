@@ -164,6 +164,7 @@
     var currentLat = null, currentLng = null, currentAccuracy = null;
     var leafletMap = null, marker = null;
     var loggedInName = null, loggedInId = null, loggedInDisplayName = null;
+    var checkedInThisSession = false; // เช็คอินสำเร็จแล้วในรอบล็อกอินนี้ (กันกดส่งซ้ำโดยไม่ตั้งใจ)
 
     // ===== เข้ารหัสรหัสผ่านด้วย SHA-256 (Web Crypto API) =====
     async function sha256Hex(text) {
@@ -224,6 +225,9 @@
     function logout() {
       loggedInName = null; loggedInId = null; loggedInDisplayName = null;
       currentLat = null; currentLng = null; currentAccuracy = null;
+      checkedInThisSession = false;
+      document.getElementById('submitBtn').textContent = 'ส่งเช็คอิน';
+      document.getElementById('submitBtn').disabled = true;
       document.getElementById('loginId').value = '';
       document.getElementById('loginPassword').value = '';
       document.getElementById('result').style.display = 'none';
@@ -321,6 +325,10 @@
     }
 
     function checkFormReady() {
+      if (checkedInThisSession) { // เช็คอินไปแล้ว ไม่เปิดปุ่มให้กดซ้ำ
+        document.getElementById('submitBtn').disabled = true;
+        return;
+      }
       const ready = currentLat !== null;
       document.getElementById('submitBtn').disabled = !ready;
     }
@@ -418,7 +426,9 @@
 
         resultEl.className = 'result success';
         resultEl.textContent = '✅ เช็คอินสำเร็จ!';
-        checkFormReady();
+        checkedInThisSession = true;
+        submitBtn.textContent = 'เช็คอินแล้ว ✓';
+        submitBtn.disabled = true;
       } catch (err) {
         resultEl.className = 'result error';
         resultEl.textContent = '❌ ' + err.message;
