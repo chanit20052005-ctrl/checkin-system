@@ -143,6 +143,24 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
+
+    // ===== วันที่วันนี้ตามเวลาเครื่อง (แก้ปัญหาวันที่เพี้ยนก่อน 07:00 น. จากการใช้เวลา UTC) =====
+    function todayLocalStr() {
+      const d = new Date();
+      return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    }
+
+    // ===== กันโค้ดแปลกปลอม (XSS): แปลงข้อความให้แสดงเป็นตัวอักษรธรรมดา =====
+    function escapeHtml(value) {
+      return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+    // ยอมให้เป็นลิงก์ได้เฉพาะที่ขึ้นต้นด้วย https:// เท่านั้น (กันลิงก์ javascript:)
+    function safeUrl(url) {
+      return (typeof url === 'string' && /^https:\/\//i.test(url)) ? url : '#';
+    }
+
     var currentLat = null, currentLng = null, currentAccuracy = null;
     var leafletMap = null, marker = null;
     var loggedInName = null, loggedInId = null, loggedInDisplayName = null;
@@ -314,7 +332,7 @@
       const fromInput = document.getElementById('historyDateFrom');
       const toInput = document.getElementById('historyDateTo');
       if (!fromInput.value || !toInput.value) {
-        const today = new Date().toISOString().slice(0, 10);
+        const today = todayLocalStr();
         fromInput.value = today; // ค่าเริ่มต้น = วันนี้ถึงวันนี้
         toInput.value = today;
       }
@@ -367,12 +385,12 @@
           div.innerHTML =
             '<div class="history-info">' +
             '<div class="time">🕒 ' + r.time.toLocaleDateString('th-TH') + ' ' + r.time.toLocaleTimeString('th-TH') + '</div>' +
-            '<a href="' + r.mapLink + '" target="_blank">🗺️ เปิดแผนที่</a>' +
+            '<a href="' + escapeHtml(safeUrl(r.mapLink)) + '" target="_blank" rel="noopener">🗺️ เปิดแผนที่</a>' +
             '</div>';
           listEl.appendChild(div);
         });
       } catch (err) {
-        listEl.innerHTML = '<div class="empty-note">โหลดไม่สำเร็จ: ' + err.message + '</div>';
+        listEl.innerHTML = '<div class="empty-note">โหลดไม่สำเร็จ: ' + escapeHtml(err.message) + '</div>';
       }
     }
 
