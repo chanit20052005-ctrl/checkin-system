@@ -219,7 +219,7 @@
           </button></div>
           <div id="mapBox">
             <div id="map"></div>
-            <div class="map-hint muted">แตะบนแผนที่ตรงตำแหน่งจริงของคุณ (ลากหมุดปรับได้)</div>
+            <div class="map-hint muted" id="mapHint"></div>
           </div>
           <div id="mapLinkBox">
             <a id="mapLink" href="#" target="_blank" rel="noopener">ดูตำแหน่งนี้บน Google Maps</a>
@@ -315,7 +315,7 @@
     }
 
     var currentLat = null, currentLng = null, currentAccuracy = null;
-    var leafletMap = null, marker = null;
+    var leafletMap = null, marker = null, accCircle = null;
     var loggedInName = null, loggedInId = null, loggedInDisplayName = null;
     var todayCheckins = [];          // รายการเช็คอินของวันนี้ (เรียงเก่า→ใหม่) ใช้วาดไทม์ไลน์
     var localNewCheckins = [];       // เช็คอินที่เพิ่งส่งในรอบนี้ (กันหายถ้าข้อมูลวันนี้โหลดเสร็จทีหลัง)
@@ -323,7 +323,13 @@
     var checkedInThisSession = false; // เช็คอินจุดปัจจุบันสำเร็จแล้ว (กันกดส่งซ้ำโดยไม่ตั้งใจ)
     var gpsRun = 0;                   // เลขรอบการขอ GPS (กันผลของรอบเก่ามาทับรอบใหม่)
     var clockTimer = null;
-    var shownDay = null;              // วันที่ที่ไทม์ไลน์กำลังแสดงอยู่ (ใช้ตรวจตอนข้ามเที่ยงคืน)
+    var shownDay = null;
+    // สิทธิ์ปักหมุดเอง (แอดมินเป็นคนเปิดให้รายคน): allowManualPin = true และ manualPinUntil ว่าง (ถาวร) หรือยังไม่เลยวันที่กำหนด
+    var pinAllowFlag = false, pinUntil = null;
+    function canManualPin() {
+      return pinAllowFlag === true && (!pinUntil || pinUntil >= todayLocalStr());
+    }
+    const NO_PIN_HINT = 'ถ้าอยู่ในอาคาร ลองขยับไปใกล้หน้าต่างหรือที่โล่งแล้วกดปุ่มด้านล่าง หากยังไม่ได้ ติดต่อแอดมินเพื่อขอสิทธิ์ปักหมุดเอง';              // วันที่ที่ไทม์ไลน์กำลังแสดงอยู่ (ใช้ตรวจตอนข้ามเที่ยงคืน)
     const GOOD_ACCURACY_M = 50;       // ความแม่นยำไม่เกินนี้ (เมตร) = ถือว่าได้ตำแหน่ง, เกินนี้ = เตือน + เปิดแผนที่ให้ปักหมุด
 
     // ===== เข้ารหัสรหัสผ่านด้วย SHA-256 (Web Crypto API) =====
@@ -394,6 +400,8 @@
         loggedInName = emp.name;
         loggedInId = employeeId;
         loggedInDisplayName = emp.nickname ? (emp.name + ' (' + emp.nickname + ')') : emp.name;
+        pinAllowFlag = emp.allowManualPin === true;
+        pinUntil = (typeof emp.manualPinUntil === 'string' && emp.manualPinUntil) ? emp.manualPinUntil : null;
         document.getElementById('displayName').textContent = 'สวัสดี ' + (emp.nickname || emp.name);
         document.getElementById('displayId').textContent = (emp.nickname ? emp.name + ' · ' : '') + 'รหัส ' + loggedInId;
 
@@ -433,13 +441,14 @@
       document.getElementById('result').style.display = 'none';
       document.getElementById('mapLinkBox').style.display = 'none';
       document.getElementById('mapBox').style.display = 'none';
-      if (marker && leafletMap) { leafletMap.removeLayer(marker); marker = null; }
+      clearMapMarks();
       renderTimeline();
     }
 
     function logout() {
       loggedInName = null; loggedInId = null; loggedInDisplayName = null;
       shownDay = null;
+      pinAllowFlag = false; pinUntil = null;
       resetCheckinScreen();
       if (clockTimer) { clearInterval(clockTimer); clockTimer = null; }
       document.getElementById('loginId').value = '';
@@ -557,7 +566,7 @@
       document.getElementById('currentPoint').classList.remove('hidden');
       document.getElementById('mapLinkBox').style.display = 'none';
       document.getElementById('mapBox').style.display = 'none';
-      if (marker && leafletMap) { leafletMap.removeLayer(marker); marker = null; } // เอาหมุดเก่าออก
+      clearMapMarks(); // เอาหมุดเก่าออก
       renderTimeline();
       requestLocation();
     }
@@ -569,7 +578,7 @@
       document.getElementById('submitBtn').disabled = true;
       document.getElementById('mapLinkBox').style.display = 'none';
       document.getElementById('mapBox').style.display = 'none';
-      if (marker && leafletMap) { leafletMap.removeLayer(marker); marker = null; }
+      clearMapMarks();
       requestLocation();
     }
 
@@ -585,10 +594,16 @@
       retryBtn.classList.add('hidden');
 
       if (!navigator.geolocation) {
-        statusEl.textContent = 'อุปกรณ์นี้ไม่รองรับ GPS กรุณาปักหมุดเองบนแผนที่';
         statusEl.className = 'gps-status bad';
         retryBtn.classList.remove('hidden');
-        showManualMap();
+        if (canManualPin()) {
+          statusEl.textContent = 'อุปกรณ์นี้ไม่รองรับ GPS กรุณาปักหมุดเองบนแผนที่';
+        } else {
+          statusEl.textContent = 'อุปกรณ์นี้ไม่รองรับ GPS';
+          helpEl.textContent = 'ลองเปิดหน้านี้ด้วยมือถือเครื่องอื่นหรือเบราว์เซอร์อื่น หรือติดต่อแอดมินเพื่อขอสิทธิ์ปักหมุดเอง';
+          helpEl.classList.remove('hidden');
+        }
+        showMap(null, null);
         return;
       }
 
@@ -603,13 +618,18 @@
         if (stale()) return;
         setLocation(lat, lng, accuracy);
         retryBtn.classList.remove('hidden');
+        showMap(lat, lng, accuracy); // ทุกคนเห็นตำแหน่งบนแผนที่
         if (accuracy <= GOOD_ACCURACY_M) {
           statusEl.textContent = 'ได้ตำแหน่งแล้ว · แม่นยำ ~' + Math.round(accuracy) + ' ม.';
           statusEl.className = 'gps-status ok';
         } else {
-          statusEl.textContent = 'GPS ไม่ค่อยแม่นยำ (~' + Math.round(accuracy) + ' ม.) แนะนำให้แตะแผนที่ตรงตำแหน่งจริง';
           statusEl.className = 'gps-status bad';
-          showManualMap();
+          if (canManualPin()) {
+            statusEl.textContent = 'GPS ไม่ค่อยแม่นยำ (~' + Math.round(accuracy) + ' ม.) แนะนำให้แตะแผนที่ตรงตำแหน่งจริง';
+          } else {
+            // ไม่มีสิทธิ์ปักหมุด: ยังเช็คอินด้วยตำแหน่ง GPS นี้ได้ หรือกดหาใหม่ให้แม่นขึ้น
+            statusEl.textContent = 'GPS ไม่ค่อยแม่นยำ (~' + Math.round(accuracy) + ' ม.) เช็คอินด้วยตำแหน่งนี้ได้ หรือกดหาใหม่ให้แม่นขึ้น';
+          }
         }
       }
       function fallbackToManual(errorCode) {
@@ -621,14 +641,17 @@
         if (errorCode === 1) {
           // ผู้ใช้/เบราว์เซอร์ไม่อนุญาตให้เว็บนี้ใช้ตำแหน่ง
           statusEl.textContent = 'เบราว์เซอร์ไม่ได้อนุญาตให้เว็บนี้ใช้ตำแหน่ง';
-          helpEl.textContent = 'แตะไอคอนแม่กุญแจ/การตั้งค่าเว็บไซต์ข้างช่องที่อยู่เว็บ แล้วเปลี่ยน "ตำแหน่ง" เป็น "อนุญาต" จากนั้นกดปุ่มด้านล่าง หรือแตะแผนที่เพื่อปักหมุดเองก็ได้';
+          helpEl.textContent = 'แตะไอคอนแม่กุญแจ/การตั้งค่าเว็บไซต์ข้างช่องที่อยู่เว็บ แล้วเปลี่ยน "ตำแหน่ง" เป็น "อนุญาต" จากนั้นกดปุ่มด้านล่าง' +
+            (canManualPin() ? ' หรือแตะแผนที่เพื่อปักหมุดเองก็ได้' : '');
         } else {
           statusEl.textContent = 'หาตำแหน่งอัตโนมัติไม่เจอ';
-          helpEl.textContent = 'ตรวจว่าเปิด GPS (ตำแหน่ง) ในมือถือแล้ว จากนั้นกดปุ่มด้านล่าง หรือแตะแผนที่ตรงตำแหน่งที่คุณอยู่เพื่อปักหมุดเอง';
+          helpEl.textContent = canManualPin()
+            ? 'ตรวจว่าเปิด GPS (ตำแหน่ง) ในมือถือแล้ว จากนั้นกดปุ่มด้านล่าง หรือแตะแผนที่ตรงตำแหน่งที่คุณอยู่เพื่อปักหมุดเอง'
+            : 'ตรวจว่าเปิด GPS (ตำแหน่ง) ในมือถือแล้ว จากนั้นกดปุ่มด้านล่าง ' + NO_PIN_HINT;
         }
         helpEl.classList.remove('hidden');
         retryBtn.classList.remove('hidden');
-        showManualMap();
+        showMap(null, null);
       }
 
       watchId = navigator.geolocation.watchPosition(function(pos) {
@@ -648,32 +671,57 @@
       }, 8000);
     }
 
-    function showManualMap() {
+    // ===== แผนที่ในจุดปัจจุบัน: ทุกคนเห็นตำแหน่ง GPS / ปักหรือลากหมุดได้เฉพาะคนที่แอดมินให้สิทธิ์ =====
+    function clearMapMarks() {
+      if (!leafletMap) return;
+      if (marker) { leafletMap.removeLayer(marker); marker = null; }
+      if (accCircle) { leafletMap.removeLayer(accCircle); accCircle = null; }
+    }
+    function onPinMoved(lat, lng) {
+      setLocation(lat, lng); // ปักเอง = ไม่มีค่าความแม่นยำ (บันทึกเป็น "ปักหมุดเอง")
+      if (accCircle) { leafletMap.removeLayer(accCircle); accCircle = null; }
+      document.getElementById('gpsHelp').classList.add('hidden');
+      document.getElementById('gpsStatus').textContent = 'ใช้ตำแหน่งที่ปักหมุดเอง';
+      document.getElementById('gpsStatus').className = 'gps-status ok';
+    }
+    function placeMarker(latlng) {
+      if (marker) { marker.setLatLng(latlng); return; }
+      marker = L.marker(latlng, { draggable: canManualPin() }).addTo(leafletMap);
+      marker.on('dragend', function() {
+        if (checkedInThisSession || !canManualPin()) return;
+        const pos = marker.getLatLng();
+        onPinMoved(pos.lat, pos.lng);
+      });
+    }
+    // lat/lng/accuracy = ตำแหน่งจาก GPS (ถ้าไม่มี ให้ส่ง null → แสดงแผนที่ประเทศไทยไว้ให้ปักหมุด)
+    function showMap(lat, lng, accuracy) {
+      const allowed = canManualPin();
       document.getElementById('mapBox').style.display = 'block';
+      document.getElementById('mapHint').textContent = allowed
+        ? 'แตะบนแผนที่ตรงตำแหน่งจริงของคุณเพื่อปักหมุด (ลากหมุดปรับได้)'
+        : (lat !== null ? 'หมุดคือตำแหน่งจาก GPS ถ้าไม่ตรง กด "ลองหาตำแหน่งอีกครั้ง" (การปักหมุดเองต้องได้รับสิทธิ์จากแอดมิน)'
+                        : 'ยังไม่ได้ตำแหน่งจาก GPS (การปักหมุดเองต้องได้รับสิทธิ์จากแอดมิน)');
       if (!leafletMap) {
         leafletMap = L.map('map').setView([13.7563, 100.5018], 6);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
           attribution: '&copy; OpenStreetMap contributors', maxZoom: 19
         }).addTo(leafletMap);
         leafletMap.on('click', function(e) {
-          if (checkedInThisSession) return; // เช็คอินจุดนี้ไปแล้ว ไม่รับหมุดใหม่
-          setLocation(e.latlng.lat, e.latlng.lng);
-          if (marker) marker.setLatLng(e.latlng);
-          else {
-            marker = L.marker(e.latlng, { draggable: true }).addTo(leafletMap);
-            marker.on('dragend', function() {
-              if (checkedInThisSession) return;
-              const pos = marker.getLatLng();
-              setLocation(pos.lat, pos.lng);
-            });
-          }
-          document.getElementById('gpsHelp').classList.add('hidden');
-          document.getElementById('gpsStatus').textContent = 'ใช้ตำแหน่งที่ปักหมุดเอง';
-          document.getElementById('gpsStatus').className = 'gps-status ok';
+          if (checkedInThisSession || !canManualPin()) return; // เช็คอินจุดนี้ไปแล้ว / ไม่มีสิทธิ์ปักหมุด
+          placeMarker(e.latlng);
+          onPinMoved(e.latlng.lat, e.latlng.lng);
         });
-      } else {
-        setTimeout(function() { leafletMap.invalidateSize(); }, 100);
       }
+      clearMapMarks();
+      if (lat !== null && lng !== null) {
+        const ll = [lat, lng];
+        if (typeof accuracy === 'number') {
+          accCircle = L.circle(ll, { radius: accuracy, color: '#0F6B5C', weight: 1, fillColor: '#0F6B5C', fillOpacity: 0.12 }).addTo(leafletMap);
+        }
+        placeMarker(ll);
+        leafletMap.setView(ll, typeof accuracy === 'number' && accuracy > 200 ? 15 : 17);
+      }
+      setTimeout(function() { leafletMap.invalidateSize(); }, 100);
     }
 
     function setLocation(lat, lng, accuracy) {
