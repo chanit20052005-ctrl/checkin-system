@@ -136,7 +136,7 @@
     /* ===== แท็บพนักงาน ===== */
     .emp-layout { display: flex; gap: 20px; align-items: flex-start; }
     .emp-table { flex-grow: 1; min-width: 0; overflow: hidden; }
-    .e-head, .e-row { display: grid; grid-template-columns: 120px minmax(0, 1.6fr) minmax(0, 1fr) 300px; gap: 12px; padding: 10px 18px; align-items: center; }
+    .e-head, .e-row { display: grid; grid-template-columns: 110px minmax(0, 1.5fr) minmax(0, 0.9fr) 150px 290px; gap: 12px; padding: 10px 18px; align-items: center; }
     .e-head { font-size: 12px; font-weight: 600; color: var(--muted); border-bottom: 1px solid var(--line); padding-top: 12px; padding-bottom: 12px; }
     .e-row { border-bottom: 1px solid var(--line-soft); font-size: 14px; }
     .e-row:last-child { border-bottom: none; }
@@ -150,6 +150,17 @@
     .emp-form .btn-primary { width: 100%; margin-top: 4px; }
     .emp-form .note { font-size: 12px; color: var(--muted); line-height: 1.5; }
     .emp-search { width: 300px; }
+    .pin-badge { display: inline-block; font-size: 12px; font-weight: 600; padding: 4px 9px; border-radius: 999px; white-space: nowrap; }
+    .pin-badge.off { background: #F1F0EC; color: var(--muted); }
+    .pin-badge.today { background: var(--warn-soft); color: var(--warn); }
+    .pin-badge.always { background: var(--accent-soft); color: var(--accent-dark); }
+    .modal .choice {
+      display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; text-align: left;
+      border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; background: #fff; cursor: pointer;
+    }
+    .modal .choice:hover { border-color: var(--accent); }
+    .modal .choice .ct { font-size: 15px; font-weight: 600; color: var(--ink); }
+    .modal .choice .cd { font-size: 13px; color: var(--muted); }
 
     /* ===== หน้าต่างยืนยัน/แก้ไข (แทนกล่องเด้งของเบราว์เซอร์) ===== */
     .modal-backdrop {
@@ -361,7 +372,7 @@
         </div>
         <div class="emp-layout">
           <div class="card emp-table">
-            <div class="e-head"><div>รหัส</div><div>ชื่อ-นามสกุล</div><div>ชื่อเล่น</div><div style="text-align: right;">จัดการ</div></div>
+            <div class="e-head"><div>รหัส</div><div>ชื่อ-นามสกุล</div><div>ชื่อเล่น</div><div>ปักหมุดเอง</div><div style="text-align: right;">จัดการ</div></div>
             <div id="employeeList"><div class="empty-note">กำลังโหลด...</div></div>
           </div>
           <div class="card emp-form" id="empForm">
@@ -866,7 +877,7 @@
         const list = [];
         snapshot.forEach(function(doc) {
           const emp = doc.data();
-          list.push({ id: doc.id, name: emp.name || '', nickname: emp.nickname || '' });
+          list.push({ id: doc.id, name: emp.name || '', nickname: emp.nickname || '', allowManualPin: emp.allowManualPin === true, manualPinUntil: (typeof emp.manualPinUntil === 'string' && emp.manualPinUntil) ? emp.manualPinUntil : null });
         });
         list.sort(function(a, b) { return a.id.localeCompare(b.id, 'th', { numeric: true }); });
         employeesCache = list;
@@ -901,14 +912,17 @@
           '<div class="e-id num">' + escapeHtml(emp.id) + '</div>' +
           '<div class="e-name">' + escapeHtml(emp.name) + '</div>' +
           '<div class="e-nick">' + (emp.nickname ? escapeHtml(emp.nickname) : '–') + '</div>' +
+          '<div class="e-pin">' + pinBadgeHtml(emp) + '</div>' +
           '<div class="e-act">' +
             '<button class="btn-text accent edit">แก้ไข</button>' +
+            '<button class="btn-text pin">' + (pinState(emp) === 'off' ? 'ให้สิทธิ์ปักหมุด' : 'ปิดสิทธิ์ปักหมุด') + '</button>' +
             '<button class="btn-text reset">รีเซ็ตรหัสผ่าน</button>' +
             '<button class="btn-text danger delete">ลบ</button>' +
           '</div>';
         // ผูกปุ่มด้วย addEventListener แทนการต่อข้อความใน onclick (ปลอดภัยกว่า)
         row.querySelector('button.edit').addEventListener('click', function() { startEdit(emp.id, emp.name, emp.nickname); });
         row.querySelector('button.reset').addEventListener('click', function() { resetPassword(emp.id); });
+        row.querySelector('button.pin').addEventListener('click', function() { toggleManualPin(emp.id); });
         row.querySelector('button.delete').addEventListener('click', function() { deleteEmployee(emp.id); });
         listEl.appendChild(row);
       });
@@ -1045,6 +1059,70 @@
     }
     function employeeLabel(e) {
       return (e.name || '-') + (e.nickname ? ' (' + e.nickname + ')' : '');
+    }
+
+    // ===== สิทธิ์ปักหมุดเอง (ถ้าไม่มีสิทธิ์ หน้าพนักงานจะไม่เปิดแผนที่ให้ปัก ต้องใช้ GPS เท่านั้น) =====
+    // เก็บในเอกสารพนักงาน: allowManualPin (true/false) + manualPinUntil ('YYYY-MM-DD' = หมดหลังวันนั้น, null = ถาวร)
+    function pinState(e) {
+      if (e.allowManualPin !== true) return 'off';
+      if (!e.manualPinUntil) return 'always';
+      return e.manualPinUntil >= todayLocalStr() ? 'today' : 'off'; // เลยวันแล้ว = หมดสิทธิ์
+    }
+    function pinBadgeHtml(e) {
+      const st = pinState(e);
+      if (st === 'always') return '<span class="pin-badge always">อนุญาตถาวร</span>';
+      if (st === 'today') return '<span class="pin-badge today">อนุญาตถึง ' + escapeHtml(thaiDate(e.manualPinUntil)) + '</span>';
+      return '<span class="pin-badge off">ไม่อนุญาต</span>';
+    }
+    async function savePinPermission(employeeId, allow, until) {
+      await db.collection('employees').doc(employeeId).update({ allowManualPin: allow, manualPinUntil: allow ? until : null });
+      loadEmployees();
+    }
+    function toggleManualPin(employeeId) {
+      const emp = employeeById(employeeId);
+      const errText = el('div', { class: 'err-text' });
+      const info = el('div', { class: 'info' }, [el('b', { text: employeeLabel(emp) }), ' · รหัส ' + employeeId]);
+      const cancel = el('button', { class: 'btn-secondary', text: 'ยกเลิก', onclick: closeModal });
+
+      async function run(allow, until, doneText) {
+        modalBusy = true;
+        document.querySelectorAll('#modalBox button').forEach(function(b) { b.disabled = true; });
+        try {
+          await savePinPermission(employeeId, allow, until);
+          modalBusy = false; closeModal();
+          showToast(doneText);
+        } catch (err) {
+          modalBusy = false;
+          document.querySelectorAll('#modalBox button').forEach(function(b) { b.disabled = false; });
+          errText.textContent = 'เกิดข้อผิดพลาด: ' + err.message;
+        }
+      }
+
+      if (pinState(emp) !== 'off') {
+        const ok = el('button', { class: 'btn-primary btn-danger', text: 'ปิดสิทธิ์', onclick: function() { run(false, null, 'ปิดสิทธิ์ปักหมุดของรหัส ' + employeeId + ' แล้ว'); } });
+        openModal([
+          el('h3', { id: 'modalTitle', text: 'ปิดสิทธิ์ปักหมุดเอง?' }),
+          info,
+          el('div', { class: 'info', text: 'หลังปิดสิทธิ์ พนักงานคนนี้จะเช็คอินได้ด้วย GPS เท่านั้น (มีผลตั้งแต่การล็อกอินครั้งถัดไป)' }),
+          errText, el('div', { class: 'actions' }, [cancel, ok])
+        ]);
+        return;
+      }
+      const today = todayLocalStr();
+      openModal([
+        el('h3', { id: 'modalTitle', text: 'ให้สิทธิ์ปักหมุดเอง' }),
+        info,
+        el('button', { class: 'choice', onclick: function() { run(true, today, 'ให้สิทธิ์ปักหมุดถึงสิ้นวันนี้แล้ว'); } }, [
+          el('span', { class: 'ct', text: 'เฉพาะวันนี้' }),
+          el('span', { class: 'cd', text: 'หมดสิทธิ์เองหลังเที่ยงคืน ไม่ต้องกลับมาปิด' })
+        ]),
+        el('button', { class: 'choice', onclick: function() { run(true, null, 'ให้สิทธิ์ปักหมุดถาวรแล้ว'); } }, [
+          el('span', { class: 'ct', text: 'ถาวร (จนกว่าแอดมินจะปิด)' }),
+          el('span', { class: 'cd', text: 'เหมาะกับคนที่ทำงานในที่ GPS อ่อนเป็นประจำ' })
+        ]),
+        el('div', { class: 'note muted', style: 'font-size: 12px;', text: 'มีผลตั้งแต่พนักงานล็อกอินครั้งถัดไป · รายการที่ปักหมุดเองจะมีป้าย "ปักหมุดเอง" ให้ตรวจในหน้ารายการเช็คอิน' }),
+        errText, el('div', { class: 'actions' }, [cancel])
+      ]);
     }
 
     // ===== รีเซ็ตรหัสผ่านพนักงาน (หน้าต่าง: รหัสใหม่ + ยืนยันอีกครั้ง) =====
